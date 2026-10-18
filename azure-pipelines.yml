@@ -1,0 +1,57 @@
+trigger:
+  branches:
+    include:
+      - main
+      - master
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  buildConfiguration: 'Release'
+  dotnetVersion: '9.0.x'
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Instalar .NET SDK'
+    inputs:
+      packageType: 'sdk'
+      version: '$(dotnetVersion)'
+
+  - task: Cache@2
+    displayName: 'Cache de pacotes NuGet'
+    inputs:
+      key: 'nuget | "$(Agent.OS)" | **/*.csproj'
+      restoreKeys: |
+        nuget | "$(Agent.OS)"
+      path: $(NUGET_PACKAGES)
+
+  - script: dotnet --info
+    displayName: 'Verificar versão do .NET'
+
+  - script: dotnet restore VehicleBilling.sln
+    displayName: 'Restaurar dependências'
+
+  - script: dotnet build VehicleBilling.sln --configuration $(buildConfiguration) --no-restore
+    displayName: 'Compilar solução'
+
+  - script: dotnet test VehicleBilling.sln --configuration $(buildConfiguration) --no-build --logger "trx;LogFileName=test-results.trx"
+    displayName: 'Executar testes automatizados'
+
+  - task: PublishTestResults@2
+    displayName: 'Publicar resultados dos testes'
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: '**/*.trx'
+      searchFolder: '$(System.DefaultWorkingDirectory)'
+      mergeTestResults: true
+      failTaskOnFailedTests: true
