@@ -5,13 +5,9 @@ namespace Comven_VehicleBilling.Domain.Entities;
 public sealed class InvoiceItem
 {
   public Guid InvoiceId { get; private set; }
-
   public Guid OperationId { get; private set; }
-
   public Money Amount { get; private set; } = Money.Zero;
-
   public Invoice Invoice { get; private set; } = null!;
-
   public Operation Operation { get; private set; } = null!;
 
   // Construtor utilizado pelo Entity Framework Core.

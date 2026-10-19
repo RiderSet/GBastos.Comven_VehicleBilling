@@ -6,13 +6,9 @@ namespace Comven_VehicleBilling.Domain.Entities;
 public sealed class Customer
 {
   public Guid Id { get; private set; }
-
   public string Name { get; private set; } = string.Empty;
-
   public CustomerPlan Plan { get; private set; }
-
   public Money Balance { get; private set; } = Money.Zero;
-
   public DateTimeOffset CreatedAt { get; private set; }
 
   // Construtor utilizado pelo Entity Framework Core.

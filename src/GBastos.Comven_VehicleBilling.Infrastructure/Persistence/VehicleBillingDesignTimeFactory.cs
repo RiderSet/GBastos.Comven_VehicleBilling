@@ -10,36 +10,47 @@ public sealed class VehicleBillingDesignTimeFactory
 {
   public VehicleBillingDbContext CreateDbContext(string[] args)
   {
-    string connectionString = "Host=127.0.0.1;Port=5432;Database=vehicle_billing;Username=billing_app;Password=Gbsft@7K10";
+    var secretsPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData),
+        "Microsoft",
+        "UserSecrets",
+        "d36bc417-ca63-4919-bef9-a07679fd6b7b",
+        "secrets.json");
 
-    try
+    if (!File.Exists(secretsPath))
     {
-      var secretsPath = Path.Combine(
-          Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-          "Microsoft", "UserSecrets", "d36bc417-ca63-4919-bef9-a07679fd6b7b", "secrets.json");
-
-      if (File.Exists(secretsPath))
-      {
-        using var document = JsonDocument.Parse(File.ReadAllText(secretsPath));
-        if (document.RootElement.TryGetProperty("ConnectionStrings", out var connStrings) &&
-            connStrings.TryGetProperty("VehicleBilling", out var val) &&
-            !string.IsNullOrEmpty(val.GetString()))
-        {
-          connectionString = val.GetString()!;
-        }
-      }
-    }
-    catch (Exception ex)
-    {
-      Console.WriteLine($"[Aviso DesignTime] Erro ao ler User Secrets: {ex.Message}");
+      throw new InvalidOperationException(
+          $"Arquivo de User Secrets não encontrado: {secretsPath}");
     }
 
-    // EXIBE A CONNECTION STRING EXATA NO CONSOLE PARA AUDITORIA
-    Console.WriteLine($"[DIAGNÓSTICO FINAL] ConnectionString usada: {connectionString}");
+    using var document =
+        JsonDocument.Parse(File.ReadAllText(secretsPath));
 
-    var options = new DbContextOptionsBuilder<VehicleBillingDbContext>()
-        .UseNpgsql(connectionString)
-        .Options;
+    if (!document.RootElement.TryGetProperty(
+            "ConnectionStrings:DefaultConnection",
+            out var value) ||
+        string.IsNullOrWhiteSpace(value.GetString()))
+    {
+      throw new InvalidOperationException(
+          "ConnectionStrings:DefaultConnection não foi configurada.");
+    }
+
+    var connection = new NpgsqlConnectionStringBuilder(
+        value.GetString())
+    {
+      Host = "127.0.0.1",
+      Port = 5433
+    };
+
+    Console.WriteLine(
+        $"[DesignTime] PostgreSQL: {connection.Host}:{connection.Port}; " +
+        $"Database={connection.Database}; Username={connection.Username}");
+
+    var options =
+        new DbContextOptionsBuilder<VehicleBillingDbContext>()
+            .UseNpgsql(connection.ConnectionString)
+            .Options;
 
     return new VehicleBillingDbContext(options);
   }

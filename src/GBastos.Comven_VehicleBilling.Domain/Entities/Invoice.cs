@@ -6,23 +6,14 @@ namespace Comven_VehicleBilling.Domain.Entities;
 public sealed class Invoice
 {
   private readonly List<InvoiceItem> _items = [];
-
   public Guid Id { get; private set; }
-
   public Guid CustomerId { get; private set; }
-
   public DateOnly PeriodStart { get; private set; }
-
   public DateOnly PeriodEnd { get; private set; }
-
   public Money Total { get; private set; } = Money.Zero;
-
   public InvoiceStatus Status { get; private set; }
-
   public DateTimeOffset CreatedAt { get; private set; }
-
   public Customer Customer { get; private set; } = null!;
-
   public IReadOnlyCollection<InvoiceItem> Items => _items.AsReadOnly();
 
   // Construtor utilizado pelo Entity Framework Core.

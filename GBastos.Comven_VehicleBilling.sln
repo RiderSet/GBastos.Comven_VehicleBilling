@@ -37,6 +37,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GBastos.Comven_VehicleBilli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Comven_VehicleBilling.IntegrationTests", "tests\GBastos.Comven_VehicleBilling.IntegrationTests\Comven_VehicleBilling.IntegrationTests.csproj", "{5ACC62DA-C1DB-489D-8BB1-6E1B6D9AF5AF}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GBastos.Comven_VehicleBilling.Worker", "GBastos.Comven_VehicleBilling.Worker", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Comven_VehicleBilling.Worker", "src\GBastos.Comven_VehicleBilling.Worker\Comven_VehicleBilling.Worker\Comven_VehicleBilling.Worker.csproj", "{E37D134E-4787-4608-B7AC-3C0940C56F1D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -131,6 +135,18 @@ Global
 		{5ACC62DA-C1DB-489D-8BB1-6E1B6D9AF5AF}.Release|x64.Build.0 = Release|Any CPU
 		{5ACC62DA-C1DB-489D-8BB1-6E1B6D9AF5AF}.Release|x86.ActiveCfg = Release|Any CPU
 		{5ACC62DA-C1DB-489D-8BB1-6E1B6D9AF5AF}.Release|x86.Build.0 = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|x64.Build.0 = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Debug|x86.Build.0 = Debug|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|x64.ActiveCfg = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|x64.Build.0 = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|x86.ActiveCfg = Release|Any CPU
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -150,6 +166,8 @@ Global
 		{0A3E5A40-5BA2-4D89-93DE-004369B4CC36} = {3F959D65-8032-9FFA-24C7-C1978EBF773F}
 		{17744B1A-B4A0-F304-6013-E548D573C5B0} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5ACC62DA-C1DB-489D-8BB1-6E1B6D9AF5AF} = {17744B1A-B4A0-F304-6013-E548D573C5B0}
+		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E37D134E-4787-4608-B7AC-3C0940C56F1D} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {07A13D0D-F0F6-42D6-B938-FFDE09D5514D}

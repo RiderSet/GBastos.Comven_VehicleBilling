@@ -1,18 +1,21 @@
-
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString =
-    builder.Configuration.GetConnectionString("VehicleBilling")
-    ?? throw new InvalidOperationException(
-        "A connection string 'VehicleBilling' ainda não foi configurada.");
+// Infrastructure
+builder.Services.AddInfrastructure(
+    builder.Configuration);
 
-builder.Services.AddDbContext<VehicleBillingDbContext>(options =>
-    options.UseNpgsql(connectionString));
+// Application
+// builder.Services.AddApplication();
 
-// Constrói a aplicação somente depois de registrar os serviços.
 var app = builder.Build();
+
+// Endpoints
+app.MapCustomerEndpoints();
+app.MapOperationEndpoints();
+app.MapStatementEndpoints();
+app.MapInvoiceEndpoints();
 
 app.Run();
