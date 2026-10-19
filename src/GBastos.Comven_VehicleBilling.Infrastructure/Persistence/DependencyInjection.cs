@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Comven_VehicleBilling.Infrastructure.BillingsProvider;
+using Comven_VehicleBilling.Infrastructure.Outbox;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence;
 
@@ -12,8 +14,8 @@ public static class DependencyInjection
   {
     AddPersistence(services, configuration);
 
-    // Registrar aqui os serviços do Outbox.
-    // Registrar aqui o cliente do BillingProvider.
+    services.AddScoped<OutboxRepository>();
+    services.AddSingleton<IBillingProvider, BillingProvider>();
 
     return services;
   }

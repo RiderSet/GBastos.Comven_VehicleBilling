@@ -1,4 +1,4 @@
-namespace Comven_VehicleBilling.Infrastructure.BillingProvider;
+namespace Comven_VehicleBilling.Infrastructure.BillingsProvider;
 
 public interface IBillingProvider
 {
