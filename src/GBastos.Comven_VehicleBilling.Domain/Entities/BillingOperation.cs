@@ -14,7 +14,10 @@ public sealed class BillingOperation
   public DateTimeOffset? CompletedAt { get; private set; }
   public Guid? InvoiceId { get; private set; }
 
-  private BillingOperation() { }
+  // Construtor privado utilizado pelo Entity Framework Core.
+  private BillingOperation()
+  {
+  }
 
   public BillingOperation(
       Guid id,
@@ -24,11 +27,32 @@ public sealed class BillingOperation
       OperationStatus status,
       DateTimeOffset createdAt)
   {
-    if (id == Guid.Empty || customerId == Guid.Empty)
-      throw new ArgumentException("IDs are required.");
+    if (id == Guid.Empty)
+      throw new ArgumentException("O ID da operação é obrigatório.", nameof(id));
 
-    if (amount <= 0)
-      throw new ArgumentOutOfRangeException(nameof(amount));
+    if (customerId == Guid.Empty)
+      throw new ArgumentException("O ID do cliente é obrigatório.", nameof(customerId));
+
+    if (amount <= 0m)
+      throw new ArgumentOutOfRangeException(
+          nameof(amount),
+          "O valor da operação deve ser maior que zero.");
+
+    if (decimal.Round(amount, 2) != amount)
+      throw new ArgumentOutOfRangeException(
+          nameof(amount),
+          "O valor da operação deve ter no máximo duas casas decimais.");
+
+    if (!Enum.IsDefined(type))
+      throw new ArgumentOutOfRangeException(nameof(type), "Tipo de operação inválido.");
+
+    if (status is not OperationStatus.Charged
+        and not OperationStatus.AwaitingInvoice)
+    {
+      throw new ArgumentException(
+          "Uma nova operação deve iniciar como Charged ou AwaitingInvoice.",
+          nameof(status));
+    }
 
     Id = id;
     CustomerId = customerId;
@@ -40,45 +64,58 @@ public sealed class BillingOperation
 
   public void Complete(string provider, DateTimeOffset completedAt)
   {
-    if (Status is not OperationStatus.Accepted
-        and not OperationStatus.PendingInvoice)
-      throw new InvalidOperationException(
-          "Operation cannot be completed from its current state.");
+    if (string.IsNullOrWhiteSpace(provider))
+      throw new ArgumentException("O fornecedor é obrigatório.", nameof(provider));
 
-    Provider = provider;
+    if (Status is not OperationStatus.Charged
+        and not OperationStatus.AwaitingInvoice)
+    {
+      throw new InvalidOperationException(
+          "A operação não pode ser concluída a partir do estado atual.");
+    }
+
+    Provider = provider.Trim();
     CompletedAt = completedAt;
 
-    if (Status == OperationStatus.Accepted)
-      Status = OperationStatus.Succeeded;
+    // Operações pré-pagas permanecem Charged.
+    // Operações pós-pagas passam para AwaitingInvoice.
   }
 
   public void MarkFailed()
   {
-    if (Status is not OperationStatus.Accepted
-        and not OperationStatus.PendingInvoice)
+    if (Status is not OperationStatus.Charged
+        and not OperationStatus.AwaitingInvoice)
+    {
       throw new InvalidOperationException(
-          "Operation cannot be failed from its current state.");
+          "A operação não pode falhar a partir do estado atual.");
+    }
 
     Status = OperationStatus.Failed;
+    CompletedAt = DateTimeOffset.UtcNow;
   }
 
   public void MarkRefunded()
   {
-    if (Status != OperationStatus.Succeeded)
+    if (Status != OperationStatus.Charged)
+    {
       throw new InvalidOperationException(
-          "Only a successful prepaid operation can be refunded.");
+          "Somente operações pré-pagas cobradas podem ser reembolsadas.");
+    }
 
     Status = OperationStatus.Refunded;
+    CompletedAt = DateTimeOffset.UtcNow;
   }
 
   public void MarkInvoiced(Guid invoiceId)
   {
-    if (Status != OperationStatus.PendingInvoice)
+    if (Status != OperationStatus.AwaitingInvoice)
+    {
       throw new InvalidOperationException(
-          "Only pending operations can be invoiced.");
+          "Somente operações aguardando faturamento podem ser incluídas em uma fatura.");
+    }
 
     if (invoiceId == Guid.Empty)
-      throw new ArgumentException("Invoice ID is required.");
+      throw new ArgumentException("O ID da fatura é obrigatório.", nameof(invoiceId));
 
     InvoiceId = invoiceId;
     Status = OperationStatus.Invoiced;

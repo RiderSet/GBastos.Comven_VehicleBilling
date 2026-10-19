@@ -1,0 +1,48 @@
+using Comven_VehicleBilling.Domain.Entities;
+using Comven_VehicleBilling.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Comven_VehicleBilling.Infrastructure.Persistence.Configurations;
+
+public sealed class InvoiceItemConfiguration
+    : IEntityTypeConfiguration<InvoiceItem>
+{
+  public void Configure(EntityTypeBuilder<InvoiceItem> builder)
+  {
+    builder.ToTable("invoice_items");
+
+    // A entidade InvoiceItem não possui ID próprio.
+    builder.HasKey(item => new
+    {
+      item.InvoiceId,
+      item.OperationId
+    });
+
+    builder.Property(item => item.InvoiceId)
+        .HasColumnName("invoice_id")
+        .IsRequired();
+
+    builder.Property(item => item.OperationId)
+        .HasColumnName("operation_id")
+        .IsRequired();
+
+    builder.Property(item => item.Amount)
+        .HasColumnName("amount")
+        .HasConversion(
+            money => money.Amount,
+            amount => Money.Of(amount))
+        .HasColumnType("numeric(18,2)")
+        .IsRequired();
+
+    builder.HasOne(item => item.Operation)
+        .WithMany()
+        .HasForeignKey(item => item.OperationId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    // Uma operação só pode pertencer a um item de fatura.
+    builder.HasIndex(item => item.OperationId)
+        .IsUnique()
+        .HasDatabaseName("ux_invoice_items_operation_id");
+  }
+}
