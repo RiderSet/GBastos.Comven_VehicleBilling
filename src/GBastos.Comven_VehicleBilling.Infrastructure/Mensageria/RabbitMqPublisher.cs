@@ -109,7 +109,15 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
       };
 
+      Console.WriteLine(
+          $"RABBITMQ_DIAG Host={factory.HostName} " +
+          $"Port={factory.Port} " +
+          $"User={factory.UserName} " +
+          $"VHost={factory.VirtualHost} " +
+          $"PasswordLength={password?.Length ?? 0}");
+
       _connection = await factory.CreateConnectionAsync(
+
           cancellationToken);
     }
 
