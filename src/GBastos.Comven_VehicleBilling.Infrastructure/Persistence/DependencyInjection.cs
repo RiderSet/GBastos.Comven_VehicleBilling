@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Comven_VehicleBilling.Infrastructure.BillingsProvider;
+using Comven_VehicleBilling.Infrastructure.Mensageria;
 using Comven_VehicleBilling.Infrastructure.Outbox;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ public static class DependencyInjection
 
     services.AddScoped<OutboxRepository>();
     services.AddSingleton<IBillingProvider, BillingProvider>();
+    services.AddSingleton<RabbitMqPublisher>();
 
     return services;
   }
@@ -25,16 +27,15 @@ public static class DependencyInjection
       IConfiguration configuration)
   {
     var connectionString =
-        configuration.GetConnectionString("VehicleBilling");
+        configuration.GetConnectionString("DefaultConnection");
 
     if (string.IsNullOrWhiteSpace(connectionString))
     {
       throw new InvalidOperationException(
-          "A connection string 'VehicleBilling' não foi configurada.");
+          "A connectionstring 'DefaultConnection' não foi configurada.");
     }
 
     services.AddDbContext<VehicleBillingDbContext>(options =>
         options.UseNpgsql(connectionString));
-
   }
 }

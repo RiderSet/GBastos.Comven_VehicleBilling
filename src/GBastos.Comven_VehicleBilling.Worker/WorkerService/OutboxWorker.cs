@@ -1,3 +1,4 @@
+using Comven_VehicleBilling.Infrastructure.Mensageria;
 using Comven_VehicleBilling.Infrastructure.Outbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,25 +9,28 @@ namespace Comven_VehicleBilling.Worker.Workers;
 public sealed class OutboxWorker : BackgroundService
 {
   private const int BatchSize = 50;
+
   private static readonly TimeSpan PollingInterval =
       TimeSpan.FromSeconds(15);
 
   private readonly IServiceScopeFactory _scopeFactory;
+  private readonly RabbitMqPublisher _publisher;
   private readonly ILogger<OutboxWorker> _logger;
 
   public OutboxWorker(
       IServiceScopeFactory scopeFactory,
+      RabbitMqPublisher publisher,
       ILogger<OutboxWorker> logger)
   {
     _scopeFactory = scopeFactory;
+    _publisher = publisher;
     _logger = logger;
   }
 
   protected override async Task ExecuteAsync(
       CancellationToken stoppingToken)
   {
-    _logger.LogInformation(
-        "OutboxWorker iniciado.");
+    _logger.LogInformation("OutboxWorker iniciado.");
 
     using var timer = new PeriodicTimer(PollingInterval);
 
@@ -34,7 +38,7 @@ public sealed class OutboxWorker : BackgroundService
     {
       try
       {
-        await InspectPendingMessagesAsync(stoppingToken);
+        await ProcessPendingMessagesAsync(stoppingToken);
       }
       catch (OperationCanceledException)
           when (stoppingToken.IsCancellationRequested)
@@ -45,7 +49,7 @@ public sealed class OutboxWorker : BackgroundService
       {
         _logger.LogError(
             exception,
-            "Falha ao consultar a Outbox.");
+            "Falha ao consultar ou processar a Outbox.");
       }
 
       try
@@ -60,11 +64,10 @@ public sealed class OutboxWorker : BackgroundService
       }
     }
 
-    _logger.LogInformation(
-        "OutboxWorker encerrado.");
+    _logger.LogInformation("OutboxWorker encerrado.");
   }
 
-  private async Task InspectPendingMessagesAsync(
+  private async Task ProcessPendingMessagesAsync(
       CancellationToken cancellationToken)
   {
     using var scope = _scopeFactory.CreateScope();
@@ -78,25 +81,60 @@ public sealed class OutboxWorker : BackgroundService
 
     if (messages.Count == 0)
     {
-      _logger.LogDebug(
-          "Nenhuma mensagem pendente na Outbox.");
-
+      _logger.LogDebug("Nenhuma mensagem pendente na Outbox.");
       return;
     }
 
     _logger.LogInformation(
-        "Foram encontradas {MessageCount} mensagens pendentes.",
+        "Encontradas {MessageCount} mensagens pendentes.",
         messages.Count);
 
     foreach (var message in messages)
     {
-      _logger.LogWarning(
-          "Mensagem {MessageId}, tipo {MessageType}, ainda sem processador de negócio registrado.",
-          message.Id,
-          message.MessageType);
-    }
+      cancellationToken.ThrowIfCancellationRequested();
 
-    // Por segurança, nenhuma mensagem é alterada nesta etapa.
-    // O processamento real será conectado aos eventos de negócio.
+      try
+      {
+        await _publisher.PublishAsync(
+            message,
+            cancellationToken);
+      }
+      catch (OperationCanceledException)
+          when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
+      }
+      catch (Exception exception)
+      {
+        var nextAttempt = message.AttemptCount + 1;
+
+        var delaySeconds = Math.Min(
+            300,
+            Math.Pow(2, Math.Min(nextAttempt - 1, 8)));
+
+        message.RegisterFailure(
+            exception.Message,
+            DateTime.UtcNow.AddSeconds(delaySeconds));
+
+        await repository.SaveChangesAsync(cancellationToken);
+
+        _logger.LogWarning(
+            exception,
+            "Falha ao publicar mensagem {MessageId}. " +
+            "Nova tentativa prevista em {DelaySeconds} segundos.",
+            message.Id,
+            delaySeconds);
+
+        continue;
+      }
+
+      message.MarkAsProcessed();
+
+      await repository.SaveChangesAsync(cancellationToken);
+
+      _logger.LogInformation(
+          "Mensagem {MessageId} publicada e registrada na Outbox.",
+          message.Id);
+    }
   }
 }
