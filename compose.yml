@@ -4,17 +4,19 @@ services:
     container_name: vehicle-billing-db
     environment:
       POSTGRES_DB: vehicle_billing
-      POSTGRES_USER: billing_app
+      POSTGRES_USER: gbastos_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - billing_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U billing_app -d vehicle_billing"]
+      test: ["CMD-SHELL", "pg_isready -U gbastos_user -d vehicle_billing"]
       interval: 5s
       timeout: 3s
       retries: 10
 
 volumes:
   billing_data:
+    external: true
+    name: vehicle_billing_pgdata

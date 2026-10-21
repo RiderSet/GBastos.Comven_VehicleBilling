@@ -6,12 +6,14 @@ namespace Comven_VehicleBilling.Domain.Entities;
 public sealed class LedgerEntry
 {
   public Guid Id { get; private set; }
-  public Guid OperationId { get; private set; }
   public Guid CustomerId { get; private set; }
-  public LedgerEntryType Type { get; private set; }
+  public Guid OperationId { get; private set; }
   public Money Amount { get; private set; } = Money.Zero;
+  public LedgerEntryType Type { get; private set; }
+  public string Description { get; private set; } = string.Empty;
   public DateTimeOffset CreatedAt { get; private set; }
-  public Operation Operation { get; private set; } = null!;
+
+  // Propriedade de navegação para o Entity Framework Core.
   public Customer Customer { get; private set; } = null!;
 
   // Construtor utilizado pelo Entity Framework Core.
@@ -21,54 +23,41 @@ public sealed class LedgerEntry
 
   public LedgerEntry(
       Guid id,
-      Guid operationId,
       Guid customerId,
-      LedgerEntryType type,
+      Guid operationId,
       Money amount,
+      LedgerEntryType type,
+      string description,
       DateTimeOffset createdAt)
   {
     if (id == Guid.Empty)
-    {
       throw new ArgumentException(
-          "O ID do lançamento é obrigatório.",
-          nameof(id));
-    }
-
-    if (operationId == Guid.Empty)
-    {
-      throw new ArgumentException(
-          "O ID da operação é obrigatório.",
-          nameof(operationId));
-    }
+          "O ID do lançamento é obrigatório.", nameof(id));
 
     if (customerId == Guid.Empty)
-    {
       throw new ArgumentException(
-          "O ID do cliente é obrigatório.",
-          nameof(customerId));
-    }
+          "O ID do cliente é obrigatório.", nameof(customerId));
 
-    if (!Enum.IsDefined(type))
-    {
-      throw new ArgumentOutOfRangeException(
-          nameof(type),
-          "Tipo de lançamento inválido.");
-    }
+    if (operationId == Guid.Empty)
+      throw new ArgumentException(
+          "O ID da operação é obrigatório.", nameof(operationId));
 
     ArgumentNullException.ThrowIfNull(amount);
 
     if (amount.IsZero)
-    {
-      throw new ArgumentOutOfRangeException(
-          nameof(amount),
-          "O valor do lançamento deve ser maior que zero.");
-    }
+      throw new ArgumentException(
+          "O valor do lançamento deve ser maior que zero.", nameof(amount));
+
+    if (string.IsNullOrWhiteSpace(description))
+      throw new ArgumentException(
+          "A descrição do lançamento é obrigatória.", nameof(description));
 
     Id = id;
-    OperationId = operationId;
     CustomerId = customerId;
-    Type = type;
+    OperationId = operationId;
     Amount = amount;
+    Type = type;
+    Description = description.Trim();
     CreatedAt = createdAt;
   }
 }

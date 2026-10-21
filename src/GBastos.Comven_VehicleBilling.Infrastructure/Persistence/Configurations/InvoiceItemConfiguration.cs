@@ -35,7 +35,7 @@ public sealed class InvoiceItemConfiguration
         .HasColumnType("numeric(18,2)")
         .IsRequired();
 
-    builder.HasOne(item => item.Operation)
+    builder.HasOne<Operation>()
         .WithMany()
         .HasForeignKey(item => item.OperationId)
         .OnDelete(DeleteBehavior.Restrict);

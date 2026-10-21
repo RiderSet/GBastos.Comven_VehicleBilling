@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Comven_VehicleBilling.Domain.ValueObjects;
 
 public sealed record Money
@@ -17,7 +19,7 @@ public sealed record Money
     {
       throw new ArgumentOutOfRangeException(
           nameof(amount),
-          "O valor monetário deve ter no máximo duas casas decimais.");
+          "O valor monetário deve possuir no máximo duas casas decimais.");
     }
 
     if (amount < 0m)
@@ -64,7 +66,28 @@ public sealed record Money
 
   public bool IsZero => Amount == 0m;
 
-  public override string ToString() =>
-      Amount.ToString("F2",
-          System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+  public bool IsPositive => Amount > 0m;
+
+  public static Money operator +(Money left, Money right)
+      => left.Add(right);
+
+  public static Money operator -(Money left, Money right)
+      => left.Subtract(right);
+
+  public static bool operator >(Money left, Money right)
+      => left.Amount > right.Amount;
+
+  public static bool operator <(Money left, Money right)
+      => left.Amount < right.Amount;
+
+  public static bool operator >=(Money left, Money right)
+      => left.Amount >= right.Amount;
+
+  public static bool operator <=(Money left, Money right)
+      => left.Amount <= right.Amount;
+
+  public override string ToString()
+      => Amount.ToString(
+          "N2",
+          CultureInfo.GetCultureInfo("pt-BR"));
 }

@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Api\Comven_VehicleBilling.Api.csproj" />
+    <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Infrastructure\Comven_VehicleBilling.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
