@@ -1,13 +1,26 @@
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Comven_VehicleBilling.Worker.Workers;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Permite obter a connection string por variável de ambiente.
-builder.Configuration.AddEnvironmentVariables();
+// Carrega configurações locais, quando existirem.
+// Variáveis de ambiente têm precedência.
+builder.Configuration
+    .AddJsonFile(
+        "appsettings.json",
+        optional: true,
+        reloadOnChange: true)
+    .AddEnvironmentVariables();
 
+// Registra PostgreSQL, repositório da Outbox e RabbitMQ.
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Inicia o processamento da Outbox em segundo plano.
 builder.Services.AddHostedService<OutboxWorker>();
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+
+await host.RunAsync();
