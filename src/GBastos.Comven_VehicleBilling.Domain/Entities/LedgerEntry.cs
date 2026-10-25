@@ -13,10 +13,8 @@ public sealed class LedgerEntry
   public string Description { get; private set; } = string.Empty;
   public DateTimeOffset CreatedAt { get; private set; }
 
-  // Propriedade de navegação para o Entity Framework Core.
   public Customer Customer { get; private set; } = null!;
 
-  // Construtor utilizado pelo Entity Framework Core.
   private LedgerEntry()
   {
   }

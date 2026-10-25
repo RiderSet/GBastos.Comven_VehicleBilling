@@ -1,6 +1,7 @@
-using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
+
+namespace Comven_VehicleBilling.Domain.Entities;
 
 public sealed class Operation
 {

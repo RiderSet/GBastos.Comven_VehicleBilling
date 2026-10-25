@@ -18,6 +18,10 @@ public sealed class OperationConfiguration
         .HasColumnName("id")
         .ValueGeneratedNever();
 
+    builder.Property(operation => operation.ExternalOperationId)
+        .HasColumnName("external_operation_id")
+        .IsRequired();
+
     builder.Property(operation => operation.CustomerId)
         .HasColumnName("customer_id")
         .IsRequired();
@@ -49,6 +53,12 @@ public sealed class OperationConfiguration
         .HasColumnName("created_at")
         .IsRequired();
 
+    builder.Property(operation => operation.InvoicedAt)
+        .HasColumnName("invoiced_at");
+
+    builder.Property(operation => operation.RefundedAt)
+        .HasColumnName("refunded_at");
+
     builder.Property(operation => operation.InvoiceId)
         .HasColumnName("invoice_id");
 
@@ -62,8 +72,6 @@ public sealed class OperationConfiguration
         .HasForeignKey(operation => operation.InvoiceId)
         .OnDelete(DeleteBehavior.Restrict);
 
-    // A mesma chave de solicitação não pode ser reutilizada
-    // pelo mesmo cliente para criar operações duplicadas.
     builder.HasIndex(operation => new
     {
       operation.CustomerId,

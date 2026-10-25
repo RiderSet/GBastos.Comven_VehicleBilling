@@ -12,7 +12,6 @@ public sealed class InvoiceItemConfiguration
   {
     builder.ToTable("invoice_items");
 
-    // A entidade InvoiceItem não possui ID próprio.
     builder.HasKey(item => new
     {
       item.InvoiceId,
@@ -35,12 +34,16 @@ public sealed class InvoiceItemConfiguration
         .HasColumnType("numeric(18,2)")
         .IsRequired();
 
+    builder.HasOne(item => item.Invoice)
+        .WithMany(invoice => invoice.Items)
+        .HasForeignKey(item => item.InvoiceId)
+        .OnDelete(DeleteBehavior.Restrict);
+
     builder.HasOne<Operation>()
         .WithMany()
         .HasForeignKey(item => item.OperationId)
         .OnDelete(DeleteBehavior.Restrict);
 
-    // Uma operação só pode pertencer a um item de fatura.
     builder.HasIndex(item => item.OperationId)
         .IsUnique()
         .HasDatabaseName("ux_invoice_items_operation_id");

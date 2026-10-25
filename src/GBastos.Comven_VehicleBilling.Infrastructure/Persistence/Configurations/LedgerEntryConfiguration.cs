@@ -14,37 +14,47 @@ public sealed class LedgerEntryConfiguration
     builder.HasKey(entry => entry.Id);
 
     builder.Property(entry => entry.Id)
+        .HasColumnName("id")
         .ValueGeneratedNever();
 
     builder.Property(entry => entry.CustomerId)
+        .HasColumnName("customer_id")
         .IsRequired();
 
     builder.Property(entry => entry.OperationId)
+        .HasColumnName("operation_id")
         .IsRequired();
 
     builder.Property(entry => entry.Type)
-        .HasConversion<string>()
-        .HasMaxLength(20)
+        .HasColumnName("type")
+        .HasConversion<int>()
         .IsRequired();
 
     builder.Property(entry => entry.Description)
+        .HasColumnName("description")
         .HasMaxLength(250)
         .IsRequired();
 
     builder.Property(entry => entry.CreatedAt)
+        .HasColumnName("created_at")
         .IsRequired();
 
-    builder.OwnsOne(entry => entry.Amount, money =>
-    {
-      money.Property(value => value.Amount)
-          .HasColumnName("amount")
-          .HasPrecision(18, 2)
-          .IsRequired();
-    });
+    builder.Property(entry => entry.Amount)
+        .HasConversion(
+            money => money.Amount,
+            amount => Comven_VehicleBilling.Domain.ValueObjects.Money.Of(amount))
+        .HasColumnName("amount")
+        .HasColumnType("numeric(18,2)")
+        .IsRequired();
 
     builder.HasOne(entry => entry.Customer)
         .WithMany()
         .HasForeignKey(entry => entry.CustomerId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    builder.HasOne<Operation>()
+        .WithMany()
+        .HasForeignKey(entry => entry.OperationId)
         .OnDelete(DeleteBehavior.Restrict);
 
     builder.HasIndex(entry => new
@@ -54,7 +64,12 @@ public sealed class LedgerEntryConfiguration
     })
         .HasDatabaseName("ix_ledger_entries_customer_created_at");
 
-    builder.HasIndex(entry => entry.OperationId)
-        .HasDatabaseName("ix_ledger_entries_operation_id");
+    builder.HasIndex(entry => new
+    {
+      entry.OperationId,
+      entry.Type
+    })
+        .IsUnique()
+        .HasDatabaseName("ux_ledger_entries_operation_type");
   }
 }

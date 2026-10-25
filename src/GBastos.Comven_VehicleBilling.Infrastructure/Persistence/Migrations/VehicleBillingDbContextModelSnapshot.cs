@@ -137,6 +137,12 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("description");
+
                     b.Property<Guid>("OperationId")
                         .HasColumnType("uuid")
                         .HasColumnName("operation_id");
@@ -175,9 +181,21 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
+                    b.Property<Guid>("ExternalOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("external_operation_id");
+
                     b.Property<Guid?>("InvoiceId")
                         .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
+
+                    b.Property<DateTimeOffset?>("InvoicedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invoiced_at");
+
+                    b.Property<DateTimeOffset?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refunded_at");
 
                     b.Property<string>("RequestHash")
                         .IsRequired()
@@ -272,15 +290,13 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Operation", "Operation")
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Operation", null)
                         .WithMany()
                         .HasForeignKey("OperationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Invoice");
-
-                    b.Navigation("Operation");
                 });
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.LedgerEntry", b =>
@@ -291,15 +307,13 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Operation", "Operation")
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Operation", null)
                         .WithMany()
                         .HasForeignKey("OperationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Customer");
-
-                    b.Navigation("Operation");
                 });
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.Operation", b =>
