@@ -40,6 +40,10 @@ public sealed class OutboxMessageConfiguration
     builder.Property(message => message.LastError)
         .HasColumnType("text");
 
+    builder.Property(message => message.LockId);
+
+    builder.Property(message => message.LockedUntil);
+
     builder.HasIndex(message => new
     {
       message.ProcessedAt,

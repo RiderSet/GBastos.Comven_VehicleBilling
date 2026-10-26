@@ -10,8 +10,8 @@ public sealed class OutboxPersistenceTests
   private static VehicleBillingDbContext CreateDbContext()
   {
     var connectionString =
-        Environment.GetEnvironmentVariable(
-            "VEHICLE_BILLING_TEST_CONNECTION_STRING");
+    Environment.GetEnvironmentVariable(
+    "VEHICLE_BILLING_TEST_CONNECTION_STRING");
 
     if (string.IsNullOrWhiteSpace(connectionString))
     {
@@ -26,26 +26,25 @@ public sealed class OutboxPersistenceTests
             .Options;
 
     return new VehicleBillingDbContext(options);
+
   }
 
   [Fact]
   public async Task ShouldPersistAndRetrieveOutboxMessage()
   {
     var message = new OutboxMessage(
-        messageType: "IntegrationTest.MessageCreated",
-        aggregateId: Guid.NewGuid(),
-        payload: """{"source":"integration-test"}""");
+    messageType: "IntegrationTest.MessageCreated",
+    aggregateId: Guid.NewGuid(),
+    payload: """{"source":"integration-test"}""");
 
     try
     {
-      // Arrange e Act: persiste a mensagem.
       await using (var dbContext = CreateDbContext())
       {
         dbContext.OutboxMessages.Add(message);
         await dbContext.SaveChangesAsync();
       }
 
-      // Recupera a mensagem usando um novo contexto.
       await using var verificationContext = CreateDbContext();
 
       var persistedMessage =
@@ -54,7 +53,6 @@ public sealed class OutboxPersistenceTests
               .SingleOrDefaultAsync(
                   item => item.Id == message.Id);
 
-      // Assert: verifica se a mensagem foi persistida.
       Assert.NotNull(persistedMessage);
 
       Assert.Equal(message.Id, persistedMessage.Id);
@@ -65,7 +63,6 @@ public sealed class OutboxPersistenceTests
           message.AggregateId,
           persistedMessage.AggregateId);
 
-      // Compara o conteúdo JSON, não sua formatação textual.
       using var payloadDocument =
           JsonDocument.Parse(persistedMessage.Payload);
 
@@ -80,7 +77,6 @@ public sealed class OutboxPersistenceTests
     }
     finally
     {
-      // Remove exclusivamente o registro criado por este teste.
       await using var cleanupContext = CreateDbContext();
 
       var createdMessage =
@@ -94,5 +90,95 @@ public sealed class OutboxPersistenceTests
         await cleanupContext.SaveChangesAsync();
       }
     }
+
+  }
+
+  [Fact]
+  public async Task ShouldReserveDistinctMessagesWhenCalledConcurrently()
+  {
+    const int batchSize = 5;
+    const int messageCount = batchSize * 2;
+
+    var messages = Enumerable.Range(0, messageCount)
+        .Select(index => new OutboxMessage(
+            messageType: "IntegrationTest.ConcurrentReservation",
+            aggregateId: Guid.NewGuid(),
+            payload: JsonSerializer.Serialize(
+                new { source = "concurrency-test", index })))
+        .ToArray();
+
+    var expectedIds = messages
+        .Select(message => message.Id)
+        .ToHashSet();
+
+    try
+    {
+      // Insere somente mensagens pertencentes a este teste.
+      // A data antiga garante prioridade sobre mensagens recentes.
+      await using (var dbContext = CreateDbContext())
+      {
+        for (var index = 0; index < messages.Length; index++)
+        {
+          dbContext.Entry(messages[index])
+              .Property("CreatedAt")
+              .CurrentValue = DateTime.UtcNow
+                  .AddYears(-100)
+                  .AddMilliseconds(index);
+        }
+
+        dbContext.OutboxMessages.AddRange(messages);
+
+        await dbContext.SaveChangesAsync();
+      }
+
+      // Cada chamada usa seu próprio DbContext e sua própria transação.
+      var tasks = Enumerable.Range(0, 2)
+          .Select(async _ =>
+          {
+            await using var dbContext = CreateDbContext();
+
+            var repository = new OutboxRepository(dbContext);
+
+            return await repository.GetPendingAsync(batchSize);
+          })
+          .ToArray();
+
+      var batches = await Task.WhenAll(tasks);
+
+      var firstIds = batches[0]
+          .Select(message => message.Id)
+          .ToHashSet();
+
+      var secondIds = batches[1]
+          .Select(message => message.Id)
+          .ToHashSet();
+
+      // Cada chamada deve reservar cinco mensagens.
+      Assert.Equal(batchSize, firstIds.Count);
+      Assert.Equal(batchSize, secondIds.Count);
+
+      // Nenhuma mensagem pode pertencer aos dois lotes.
+      Assert.Empty(firstIds.Intersect(secondIds));
+
+      // Os dois lotes devem conter exatamente as dez mensagens do teste.
+      Assert.True(expectedIds.SetEquals(firstIds.Concat(secondIds)));
+    }
+    finally
+    {
+      // Limpa exclusivamente as mensagens criadas por este teste.
+      await using var cleanupContext = CreateDbContext();
+
+      var createdMessages =
+          await cleanupContext.OutboxMessages
+              .Where(message => expectedIds.Contains(message.Id))
+              .ToListAsync();
+
+      if (createdMessages.Count > 0)
+      {
+        cleanupContext.OutboxMessages.RemoveRange(createdMessages);
+        await cleanupContext.SaveChangesAsync();
+      }
+    }
+
   }
 }

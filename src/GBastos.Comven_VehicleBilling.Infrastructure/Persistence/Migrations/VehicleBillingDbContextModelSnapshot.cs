@@ -248,6 +248,12 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                     b.Property<string>("LastError")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("LockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("MessageType")
                         .IsRequired()
                         .HasMaxLength(200)

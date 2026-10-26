@@ -22,15 +22,50 @@ public sealed class OutboxRepository
     }
 
     var now = DateTime.UtcNow;
+    var lockId = Guid.NewGuid();
+    var lockedUntil = now.AddMinutes(5);
 
-    return await _dbContext.OutboxMessages
+    await using var transaction =
+        await _dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
+    await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+        $"""
+            WITH candidates AS
+            (
+                SELECT "Id"
+                FROM outbox_messages
+                WHERE "ProcessedAt" IS NULL
+                  AND (
+                      "NextAttemptAt" IS NULL
+                      OR "NextAttemptAt" <= {now}
+                  )
+                  AND (
+                      "LockedUntil" IS NULL
+                      OR "LockedUntil" <= {now}
+                  )
+                ORDER BY "CreatedAt"
+                FOR UPDATE SKIP LOCKED
+                LIMIT {batchSize}
+            )
+            UPDATE outbox_messages AS message
+            SET "LockId" = {lockId},
+                "LockedUntil" = {lockedUntil}
+            FROM candidates
+            WHERE message."Id" = candidates."Id";
+            """,
+        cancellationToken);
+
+    var messages = await _dbContext.OutboxMessages
         .Where(message =>
-            message.ProcessedAt == null &&
-            (message.NextAttemptAt == null ||
-             message.NextAttemptAt <= now))
+            message.LockId == lockId &&
+            message.ProcessedAt == null)
         .OrderBy(message => message.CreatedAt)
-        .Take(batchSize)
         .ToListAsync(cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+
+    return messages;
   }
 
   public async Task SaveChangesAsync(
