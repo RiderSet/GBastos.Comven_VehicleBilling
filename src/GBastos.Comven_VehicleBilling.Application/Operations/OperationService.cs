@@ -8,7 +8,8 @@ public sealed class OperationService
 
   public OperationService(IOperationRepository repository)
   {
-    _repository = repository;
+    _repository = repository
+        ?? throw new ArgumentNullException(nameof(repository));
   }
 
   public async Task<OperationDto> CreateAsync(
@@ -18,16 +19,20 @@ public sealed class OperationService
     ArgumentNullException.ThrowIfNull(command);
 
     if (command.CustomerId == Guid.Empty)
-      throw new ApplicationException("O cliente é obrigatório.");
+      throw new ApplicationException(
+          "O cliente é obrigatório.");
 
     if (string.IsNullOrWhiteSpace(command.OperationType))
-      throw new ApplicationException("O tipo da operação é obrigatório.");
+      throw new ApplicationException(
+          "O tipo da operação é obrigatório.");
 
     if (command.Amount <= 0)
-      throw new ApplicationException("O valor deve ser maior que zero.");
+      throw new ApplicationException(
+          "O valor deve ser maior que zero.");
 
     return await _repository.CreateAsync(
-        command, cancellationToken);
+        command,
+        cancellationToken);
   }
 
   public async Task<OperationDto?> GetByIdAsync(
@@ -35,9 +40,12 @@ public sealed class OperationService
       CancellationToken cancellationToken = default)
   {
     if (id == Guid.Empty)
-      throw new ApplicationException("O identificador da operação é inválido.");
+      throw new ApplicationException(
+          "O identificador da operação é inválido.");
 
-    return await _repository.GetByIdAsync(id, cancellationToken);
+    return await _repository.GetByIdAsync(
+        id,
+        cancellationToken);
   }
 
   public Task<IReadOnlyList<OperationDto>> GetAllAsync(
@@ -45,8 +53,11 @@ public sealed class OperationService
       CancellationToken cancellationToken = default)
   {
     if (customerId == Guid.Empty)
-      throw new ApplicationException("O identificador do cliente é inválido.");
+      throw new ApplicationException(
+          "O identificador do cliente é inválido.");
 
-    return _repository.GetAllAsync(customerId, cancellationToken);
+    return _repository.GetAllAsync(
+        customerId,
+        cancellationToken);
   }
 }
