@@ -94,9 +94,10 @@ public sealed class OutboxWorker : BackgroundService
     {
       cancellationToken.ThrowIfCancellationRequested();
 
+      var messageId = message.Id;
       var lockId = message.LockId
           ?? throw new InvalidOperationException(
-              $"A mensagem {message.Id} não possui reserva.");
+              $"A mensagem {messageId} não possui reserva.");
 
       try
       {
@@ -107,8 +108,7 @@ public sealed class OutboxWorker : BackgroundService
       catch (OperationCanceledException)
           when (cancellationToken.IsCancellationRequested)
       {
-        // Não continuar processando o lote após o cancelamento.
-        // A reserva poderá ser recuperada após sua expiração.
+        // A reserva será recuperada após expirar.
         throw;
       }
       catch (Exception exception)
@@ -121,28 +121,43 @@ public sealed class OutboxWorker : BackgroundService
 
         try
         {
-          message.RegisterFailure(
+          var registered = await repository.RegisterFailureAsync(
+              messageId,
               lockId,
               exception.Message,
-              DateTime.UtcNow.AddSeconds(delaySeconds));
-
-          await repository.SaveChangesAsync(
+              DateTime.UtcNow.AddSeconds(delaySeconds),
               cancellationToken);
 
-          _logger.LogWarning(
-              exception,
-              "Falha ao publicar mensagem {MessageId}. " +
-              "Nova tentativa prevista em {DelaySeconds} segundos.",
-              message.Id,
-              delaySeconds);
+          if (registered)
+          {
+            _logger.LogWarning(
+                exception,
+                "Falha ao publicar a mensagem {MessageId}. " +
+                "Nova tentativa prevista em {DelaySeconds} segundos.",
+                messageId,
+                delaySeconds);
+          }
+          else
+          {
+            _logger.LogWarning(
+                exception,
+                "A falha da mensagem {MessageId} não foi registrada: " +
+                "a reserva expirou ou foi substituída.",
+                messageId);
+          }
         }
-        catch (InvalidOperationException lockException)
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
-          _logger.LogWarning(
-              lockException,
+          throw;
+        }
+        catch (Exception persistenceException)
+        {
+          _logger.LogError(
+              persistenceException,
               "Não foi possível registrar a falha da mensagem " +
-              "{MessageId}; a reserva pode ter expirado.",
-              message.Id);
+              "{MessageId}. A reserva poderá expirar.",
+              messageId);
         }
 
         continue;
@@ -150,25 +165,41 @@ public sealed class OutboxWorker : BackgroundService
 
       try
       {
-        message.MarkAsProcessed(lockId);
-
-        await repository.SaveChangesAsync(
+        var registered = await repository.MarkAsProcessedAsync(
+            messageId,
+            lockId,
             cancellationToken);
 
-        _logger.LogInformation(
-            "Mensagem {MessageId} publicada e registrada na Outbox.",
-            message.Id);
+        if (registered)
+        {
+          _logger.LogInformation(
+              "Mensagem {MessageId} publicada e registrada na Outbox.",
+              messageId);
+        }
+        else
+        {
+          _logger.LogError(
+              "A publicação da mensagem {MessageId} foi concluída, " +
+              "mas a reserva não era mais válida. A mensagem poderá " +
+              "ser publicada novamente.",
+              messageId);
+        }
       }
-      catch (InvalidOperationException lockException)
+      catch (OperationCanceledException)
+          when (cancellationToken.IsCancellationRequested)
       {
-        // A publicação pode já ter sido confirmada pelo RabbitMQ.
-        // Não presumir que a mensagem deixou de ser entregue.
+        // A publicação pode ter sido confirmada.
+        // Não presumir que ela deixou de ser entregue.
+        throw;
+      }
+      catch (Exception exception)
+      {
         _logger.LogError(
-            lockException,
-            "A mensagem {MessageId} foi publicada, mas não foi " +
-            "possível registrá-la como processada. " +
-            "Ela poderá ser publicada novamente após a reserva expirar.",
-            message.Id);
+            exception,
+            "A publicação da mensagem {MessageId} foi concluída, " +
+            "mas não foi possível registrar a conclusão na Outbox. " +
+            "A mensagem poderá ser publicada novamente.",
+            messageId);
       }
     }
   }

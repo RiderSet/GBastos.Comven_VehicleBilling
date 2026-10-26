@@ -45,8 +45,8 @@ public sealed class OutboxRepository
                       OR "LockedUntil" <= {now}
                   )
                 ORDER BY "CreatedAt"
-                FOR UPDATE SKIP LOCKED
                 LIMIT {batchSize}
+                FOR UPDATE SKIP LOCKED
             )
             UPDATE outbox_messages AS message
             SET "LockId" = {lockId},
@@ -68,9 +68,57 @@ public sealed class OutboxRepository
     return messages;
   }
 
-  public async Task SaveChangesAsync(
+  public async Task<bool> MarkAsProcessedAsync(
+      Guid messageId,
+      Guid lockId,
       CancellationToken cancellationToken = default)
   {
-    await _dbContext.SaveChangesAsync(cancellationToken);
+    var now = DateTime.UtcNow;
+
+    var affectedRows = await _dbContext.OutboxMessages
+        .Where(message =>
+            message.Id == messageId &&
+            message.LockId == lockId &&
+            message.ProcessedAt == null &&
+            message.LockedUntil != null &&
+            message.LockedUntil > now)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(message => message.ProcessedAt, (DateTime?)now)
+            .SetProperty(message => message.NextAttemptAt, (DateTime?)null)
+            .SetProperty(message => message.LastError, (string?)null)
+            .SetProperty(message => message.LockId, (Guid?)null)
+            .SetProperty(message => message.LockedUntil, (DateTime?)null),
+            cancellationToken);
+
+    return affectedRows == 1;
+  }
+
+  public async Task<bool> RegisterFailureAsync(
+      Guid messageId,
+      Guid lockId,
+      string error,
+      DateTime nextAttemptAt,
+      CancellationToken cancellationToken = default)
+  {
+    var now = DateTime.UtcNow;
+
+    var affectedRows = await _dbContext.OutboxMessages
+        .Where(message =>
+            message.Id == messageId &&
+            message.LockId == lockId &&
+            message.ProcessedAt == null &&
+            message.LockedUntil != null &&
+            message.LockedUntil > now)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(
+                message => message.AttemptCount,
+                message => message.AttemptCount + 1)
+            .SetProperty(message => message.LastError, error)
+            .SetProperty(message => message.NextAttemptAt, (DateTime?)nextAttemptAt)
+            .SetProperty(message => message.LockId, (Guid?)null)
+            .SetProperty(message => message.LockedUntil, (DateTime?)null),
+            cancellationToken);
+
+    return affectedRows == 1;
   }
 }

@@ -181,4 +181,97 @@ public sealed class OutboxPersistenceTests
     }
 
   }
+ [Fact]
+  public async Task ShouldRejectProcessingWhenLockWasReplaced()
+  {
+    var message = new OutboxMessage(
+        messageType: "IntegrationTest.StaleLock",
+        aggregateId: Guid.NewGuid(),
+        payload: """{"source":"stale-lock-test"}""");
+
+    var oldLockId = Guid.NewGuid();
+    var newLockId = Guid.NewGuid();
+    var lockExpiry = DateTime.UtcNow.AddMinutes(5);
+
+    try
+    {
+      await using (var setupContext = CreateDbContext())
+      {
+        setupContext.OutboxMessages.Add(message);
+        await setupContext.SaveChangesAsync();
+
+        // Simula a reserva original.
+        await setupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(
+                    item => item.LockId,
+                    (Guid?)oldLockId)
+                .SetProperty(
+                    item => item.LockedUntil,
+                    (DateTime?)lockExpiry));
+      }
+
+      // Simula outro worker substituindo a reserva original.
+      await using (var replacementContext = CreateDbContext())
+      {
+        var affectedRows = await replacementContext.OutboxMessages
+            .Where(item =>
+                item.Id == message.Id &&
+                item.ProcessedAt == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(
+                    item => item.LockId,
+                    (Guid?)newLockId)
+                .SetProperty(
+                    item => item.LockedUntil,
+                    (DateTime?)lockExpiry));
+
+        Assert.Equal(1, affectedRows);
+      }
+
+      // O worker antigo não deve conseguir concluir a mensagem.
+      await using (var workerContext = CreateDbContext())
+      {
+        var repository = new OutboxRepository(workerContext);
+
+        var processed = await repository.MarkAsProcessedAsync(
+            message.Id,
+            oldLockId);
+
+        Assert.False(processed);
+      }
+
+      // Confirma que a mensagem continua pendente
+      // e que a nova reserva foi preservada.
+      await using (var verificationContext = CreateDbContext())
+      {
+        var persistedMessage =
+            await verificationContext.OutboxMessages
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == message.Id);
+
+        Assert.Null(persistedMessage.ProcessedAt);
+        Assert.Equal(newLockId, persistedMessage.LockId);
+        Assert.Equal(
+    lockExpiry.Ticks / 10,
+    persistedMessage.LockedUntil!.Value.Ticks / 10);
+      }
+    }
+    finally
+    {
+      // Limpa exclusivamente a mensagem criada pelo teste.
+      await using var cleanupContext = CreateDbContext();
+
+      var createdMessage =
+          await cleanupContext.OutboxMessages
+              .SingleOrDefaultAsync(item => item.Id == message.Id);
+
+      if (createdMessage is not null)
+      {
+        cleanupContext.OutboxMessages.Remove(createdMessage);
+        await cleanupContext.SaveChangesAsync();
+      }
+    }
+  }
 }
