@@ -93,6 +93,71 @@ public sealed class OutboxPersistenceTests
 
   }
 
+[Fact]
+public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
+{
+    var message = new OutboxMessage(
+        messageType: "TestEvent",
+        aggregateId: Guid.NewGuid(),
+        payload: """{"operationId":"failure-lock-test"}""");
+
+    var oldLockId = Guid.NewGuid();
+    var newLockId = Guid.NewGuid();
+    var lockExpiry = DateTime.UtcNow.AddMinutes(5);
+
+    message.AcquireLock(oldLockId, lockExpiry);
+
+    await using (var setupContext = CreateDbContext())
+    {
+        setupContext.OutboxMessages.Add(message);
+        await setupContext.SaveChangesAsync();
+
+        // Simula outro worker assumindo a reserva da mensagem.
+        await setupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.LockId, (Guid?)newLockId));
+    }
+
+    await using (var repositoryContext = CreateDbContext())
+    {
+        var repository = new OutboxRepository(repositoryContext);
+
+        var registered = await repository.RegisterFailureAsync(
+            message.Id,
+            oldLockId,
+            "Falha simulada pelo worker antigo",
+            DateTime.UtcNow.AddMinutes(1));
+
+        Assert.False(registered);
+    }
+
+    await using (var verificationContext = CreateDbContext())
+    {
+        var persistedMessage = await verificationContext.OutboxMessages
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == message.Id);
+
+        Assert.Equal(0, persistedMessage.AttemptCount);
+        Assert.Null(persistedMessage.LastError);
+        Assert.Null(persistedMessage.NextAttemptAt);
+        Assert.Equal(newLockId, persistedMessage.LockId);
+
+        Assert.NotNull(persistedMessage.LockedUntil);
+        Assert.Equal(
+            lockExpiry.Ticks / 10,
+            persistedMessage.LockedUntil!.Value.Ticks / 10);
+    }
+
+    // Remove somente a mensagem criada por este teste.
+    await using (var cleanupContext = CreateDbContext())
+    {
+        await cleanupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteDeleteAsync();
+    }
+}
+
   [Fact]
   public async Task ShouldReserveDistinctMessagesWhenCalledConcurrently()
   {
@@ -274,4 +339,72 @@ public sealed class OutboxPersistenceTests
       }
     }
   }
+[Fact]
+public async Task ShouldRegisterFailureAndReleaseMessageForRetry()
+{
+    var message = new OutboxMessage(
+        messageType: "IntegrationTest.FailureRecovery",
+        aggregateId: Guid.NewGuid(),
+        payload: """{"source":"failure-recovery-test"}""");
+
+    var lockId = Guid.NewGuid();
+    var lockExpiry = DateTime.UtcNow.AddMinutes(5);
+    var nextAttemptAt = DateTime.UtcNow.AddMinutes(2);
+    const string expectedError = "Falha simulada de publicação";
+
+    try
+    {
+        // Persiste a mensagem com uma reserva válida.
+        await using (var setupContext = CreateDbContext())
+        {
+            message.AcquireLock(lockId, lockExpiry);
+
+            setupContext.OutboxMessages.Add(message);
+            await setupContext.SaveChangesAsync();
+        }
+
+        // O worker registra a falha usando a reserva que possui.
+        await using (var workerContext = CreateDbContext())
+        {
+            var repository = new OutboxRepository(workerContext);
+
+            var registered = await repository.RegisterFailureAsync(
+                message.Id,
+                lockId,
+                expectedError,
+                nextAttemptAt);
+
+            Assert.True(registered);
+        }
+
+        // Confere o estado persistido no PostgreSQL.
+        await using (var verificationContext = CreateDbContext())
+        {
+            var persistedMessage = await verificationContext.OutboxMessages
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == message.Id);
+
+            Assert.Equal(1, persistedMessage.AttemptCount);
+            Assert.Equal(expectedError, persistedMessage.LastError);
+            Assert.NotNull(persistedMessage.NextAttemptAt);
+
+            Assert.Equal(
+                nextAttemptAt.Ticks / 10,
+                persistedMessage.NextAttemptAt!.Value.Ticks / 10);
+
+            Assert.Null(persistedMessage.LockId);
+            Assert.Null(persistedMessage.LockedUntil);
+            Assert.Null(persistedMessage.ProcessedAt);
+        }
+    }
+    finally
+    {
+        // Remove somente a mensagem criada por este teste.
+        await using var cleanupContext = CreateDbContext();
+
+        await cleanupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteDeleteAsync();
+    }
+}
 }
