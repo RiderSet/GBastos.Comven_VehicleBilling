@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Domain\Comven_VehicleBilling.Domain.csproj" />
     <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Application\Comven_VehicleBilling.Application.csproj" />
+    <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Infrastructure\Comven_VehicleBilling.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
