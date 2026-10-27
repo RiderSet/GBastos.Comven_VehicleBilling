@@ -407,4 +407,82 @@ public async Task ShouldRegisterFailureAndReleaseMessageForRetry()
             .ExecuteDeleteAsync();
     }
 }
+[Fact]
+public async Task ShouldReserveMessageOnlyAfterRetryTime()
+{
+    var message = new OutboxMessage(
+        messageType: "IntegrationTest.RetryEligibility",
+        aggregateId: Guid.NewGuid(),
+        payload: """{"source":"retry-eligibility-test"}""");
+
+    var nextAttemptAt = DateTime.UtcNow.AddMinutes(5);
+
+    try
+    {
+        // Cria uma mensagem cujo reprocessamento está agendado
+        // para o futuro.
+        await using (var setupContext = CreateDbContext())
+        {
+            setupContext.OutboxMessages.Add(message);
+
+            await setupContext.SaveChangesAsync();
+
+            await setupContext.OutboxMessages
+                .Where(item => item.Id == message.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(
+                        item => item.NextAttemptAt,
+                        (DateTime?)nextAttemptAt));
+        }
+
+        // Antes do horário agendado, a mensagem não pode
+        // ser reservada.
+        await using (var earlyContext = CreateDbContext())
+        {
+            var repository = new OutboxRepository(earlyContext);
+
+            var earlyBatch = await repository.GetPendingAsync(50);
+
+            Assert.DoesNotContain(
+                earlyBatch,
+                item => item.Id == message.Id);
+        }
+
+        // Simula a passagem do tempo alterando apenas a
+        // mensagem criada por este teste.
+        await using (var timeContext = CreateDbContext())
+        {
+            var affectedRows = await timeContext.OutboxMessages
+                .Where(item => item.Id == message.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(
+                        item => item.NextAttemptAt,
+                        (DateTime?)DateTime.UtcNow.AddMinutes(-1)));
+
+            Assert.Equal(1, affectedRows);
+        }
+
+        // Depois do horário agendado, a mensagem deve voltar
+        // a ser elegível para reserva.
+        await using (var retryContext = CreateDbContext())
+        {
+            var repository = new OutboxRepository(retryContext);
+
+            var retryBatch = await repository.GetPendingAsync(50);
+
+            Assert.Contains(
+                retryBatch,
+                item => item.Id == message.Id);
+        }
+    }
+    finally
+    {
+        // Remove exclusivamente a mensagem criada pelo teste.
+        await using var cleanupContext = CreateDbContext();
+
+        await cleanupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteDeleteAsync();
+    }
+}
 }

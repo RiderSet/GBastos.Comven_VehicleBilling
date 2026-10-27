@@ -71,14 +71,12 @@ public sealed class Operation
   public void MarkCharged()
   {
     EnsurePending();
-
     Status = OperationStatus.Charged;
   }
 
   public void MarkAwaitingInvoice()
   {
     EnsurePending();
-
     Status = OperationStatus.AwaitingInvoice;
   }
 
