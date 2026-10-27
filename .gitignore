@@ -490,3 +490,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Backups locais do PostgreSQL (backup local)
+/vehicle_billing_backup_*.sql
