@@ -19,9 +19,9 @@ public sealed class Operation
   public Invoice? Invoice { get; private set; }
   public string RequestHash { get; private set; } = string.Empty;
 
-  // Construtor utilizado pelo Entity Framework Core.
   private Operation()
   {
+    // Construtor utilizado pelo Entity Framework Core.
   }
 
   public Operation(
@@ -34,29 +34,39 @@ public sealed class Operation
       DateTimeOffset createdAt)
   {
     if (id == Guid.Empty)
-      throw new ArgumentException("O ID da operação é obrigatório.", nameof(id));
+      throw new ArgumentException(
+          "O ID da operação é obrigatório.", nameof(id));
 
     if (externalOperationId == Guid.Empty)
-      throw new ArgumentException("O ID externo da operação é obrigatório.", nameof(externalOperationId));
+      throw new ArgumentException(
+          "O ID externo da operação é obrigatório.",
+          nameof(externalOperationId));
 
     if (customerId == Guid.Empty)
-      throw new ArgumentException("O ID do cliente é obrigatório.", nameof(customerId));
+      throw new ArgumentException(
+          "O ID do cliente é obrigatório.", nameof(customerId));
 
     if (!Enum.IsDefined(type))
-      throw new ArgumentOutOfRangeException(nameof(type), "O tipo da operação é inválido.");
+      throw new ArgumentOutOfRangeException(
+          nameof(type), "O tipo da operação é inválido.");
 
     ArgumentNullException.ThrowIfNull(amount);
 
     if (!amount.IsPositive)
-      throw new ArgumentOutOfRangeException(nameof(amount), "O valor deve ser maior que zero.");
+      throw new ArgumentOutOfRangeException(
+          nameof(amount), "O valor deve ser maior que zero.");
 
     if (string.IsNullOrWhiteSpace(requestHash))
-      throw new ArgumentException("O hash da solicitação é obrigatório.", nameof(requestHash));
+      throw new ArgumentException(
+          "O hash da solicitação é obrigatório.",
+          nameof(requestHash));
 
     requestHash = requestHash.Trim();
 
     if (requestHash.Length > 200)
-      throw new ArgumentException("O hash não pode ultrapassar 200 caracteres.", nameof(requestHash));
+      throw new ArgumentException(
+          "O hash não pode ultrapassar 200 caracteres.",
+          nameof(requestHash));
 
     Id = id;
     ExternalOperationId = externalOperationId;
@@ -83,7 +93,6 @@ public sealed class Operation
   public void MarkFailed()
   {
     EnsurePending();
-
     Status = OperationStatus.Failed;
   }
 
@@ -92,6 +101,11 @@ public sealed class Operation
     if (Status != OperationStatus.Charged)
       throw new InvalidOperationException(
           "Somente operações cobradas podem ser reembolsadas.");
+
+    if (refundedAt == default)
+      throw new ArgumentException(
+          "A data do reembolso é obrigatória.",
+          nameof(refundedAt));
 
     RefundedAt = refundedAt;
     Status = OperationStatus.Refunded;
@@ -104,7 +118,13 @@ public sealed class Operation
           "Somente operações aguardando faturamento podem ser faturadas.");
 
     if (invoiceId == Guid.Empty)
-      throw new ArgumentException("O ID da fatura é obrigatório.", nameof(invoiceId));
+      throw new ArgumentException(
+          "O ID da fatura é obrigatório.", nameof(invoiceId));
+
+    if (invoicedAt == default)
+      throw new ArgumentException(
+          "A data do faturamento é obrigatória.",
+          nameof(invoicedAt));
 
     InvoiceId = invoiceId;
     InvoicedAt = invoicedAt;
@@ -115,7 +135,6 @@ public sealed class Operation
   {
     if (Status != OperationStatus.Pending)
       throw new InvalidOperationException(
-          "A operação só pode realizar esta transição quando estiver pendente.");
+          "A operação não está pendente.");
   }
-
 }

@@ -1,0 +1,66 @@
+﻿using Comven_VehicleBilling.Infrastructure.Outbox;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Comven_VehicleBilling.Infrastructure.Persistence.Configurations;
+
+public sealed class OutboxMessageConfiguration
+    : IEntityTypeConfiguration<OutboxMessage>
+{
+    public void Configure(EntityTypeBuilder<OutboxMessage> builder)
+    {
+        builder.ToTable("outbox_messages");
+
+        builder.HasKey(message => message.Id);
+
+        builder.Property(message => message.Id)
+            .HasColumnName("id")
+            .ValueGeneratedNever();
+
+        builder.Property(message => message.MessageType)
+            .HasColumnName("message_type")
+            .HasMaxLength(200)
+            .IsRequired();
+
+        builder.Property(message => message.AggregateId)
+            .HasColumnName("aggregate_id");
+
+        builder.Property(message => message.Payload)
+            .HasColumnName("payload")
+            .HasColumnType("jsonb")
+            .IsRequired();
+
+        builder.Property(message => message.CreatedAt)
+            .HasColumnName("created_at")
+            .IsRequired();
+
+        builder.Property(message => message.ProcessedAt)
+            .HasColumnName("processed_at");
+
+        builder.Property(message => message.AttemptCount)
+            .HasColumnName("attempt_count")
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(message => message.NextAttemptAt)
+            .HasColumnName("next_attempt_at");
+
+        builder.Property(message => message.LastError)
+            .HasColumnName("last_error")
+            .HasColumnType("text");
+
+        builder.Property(message => message.LockId)
+            .HasColumnName("lock_id");
+
+        builder.Property(message => message.LockedUntil)
+            .HasColumnName("locked_until");
+
+        builder.HasIndex(message => new
+        {
+            message.ProcessedAt,
+            message.NextAttemptAt,
+            message.CreatedAt
+        })
+            .HasDatabaseName("ix_outbox_messages_pending");
+    }
+}

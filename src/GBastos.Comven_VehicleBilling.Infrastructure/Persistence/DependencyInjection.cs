@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Comven_VehicleBilling.Infrastructure.BillingsProvider;
 using Comven_VehicleBilling.Infrastructure.Mensageria;
 using Comven_VehicleBilling.Infrastructure.Outbox;
+using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence;
 
@@ -18,6 +20,7 @@ public static class DependencyInjection
     services.AddScoped<OutboxRepository>();
     services.AddSingleton<IBillingProvider, BillingProvider>();
     services.AddSingleton<RabbitMqPublisher>();
+    services.AddScoped<ICustomerRepository, CustomerRepository>();
 
     return services;
   }

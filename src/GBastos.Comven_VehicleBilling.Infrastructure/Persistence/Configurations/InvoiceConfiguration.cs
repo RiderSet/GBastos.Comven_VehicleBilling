@@ -62,7 +62,6 @@ public sealed class InvoiceConfiguration
     builder.Navigation(invoice => invoice.Items)
         .UsePropertyAccessMode(PropertyAccessMode.Field);
 
-    // Uma única fatura por cliente e período.
     builder.HasIndex(invoice => new
     {
       invoice.CustomerId,

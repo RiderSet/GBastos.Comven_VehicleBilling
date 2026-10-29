@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Comven_VehicleBilling.MonolithSimulator.Clients;
 
 var baseUrl = args.Length > 0
     ? args[0].TrimEnd('/')
@@ -10,14 +11,17 @@ if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var apiUri) ||
 {
   Console.Error.WriteLine(
       "URL inválida. Informe uma URL HTTP ou HTTPS válida.");
+
   return 1;
 }
 
 using var httpClient = new HttpClient
 {
-  BaseAddress = new Uri(baseUrl + "/"), 
+  BaseAddress = new Uri(baseUrl + "/"),
   Timeout = TimeSpan.FromSeconds(10)
 };
+
+var apiClient = new VehicleBillingApiClient(httpClient);
 
 Console.WriteLine("========================================");
 Console.WriteLine(" MonolithSimulator");
@@ -29,11 +33,12 @@ Console.WriteLine();
 
 try
 {
-  using var response = await httpClient.GetAsync("health");
+  using var response = await apiClient.GetHealthAsync();
+
   var body = await response.Content.ReadAsStringAsync();
 
-  Console.WriteLine($"HTTP: {(int)response.StatusCode} " +
-                    $"{response.StatusCode}");
+  Console.WriteLine(
+      $"HTTP: {(int)response.StatusCode} {response.StatusCode}");
 
   if (!string.IsNullOrWhiteSpace(body))
   {
@@ -59,24 +64,29 @@ try
   {
     Console.Error.WriteLine(
         "A API respondeu, mas indicou uma falha HTTP.");
+
     return 1;
   }
 
   Console.WriteLine();
   Console.WriteLine("Teste HTTP concluído com sucesso.");
+
   return 0;
 }
 catch (HttpRequestException ex)
 {
   Console.Error.WriteLine(
       $"Não foi possível acessar a API: {ex.Message}");
+
   Console.Error.WriteLine(
       "Confirme se a API está em execução e se a URL está correta.");
+
   return 1;
 }
 catch (TaskCanceledException)
 {
   Console.Error.WriteLine(
-      "A chamada excedeu o limite de 10 segundos.");
+      "A chamada foi cancelada ou excedeu o limite de 10 segundos.");
+
   return 1;
 }
