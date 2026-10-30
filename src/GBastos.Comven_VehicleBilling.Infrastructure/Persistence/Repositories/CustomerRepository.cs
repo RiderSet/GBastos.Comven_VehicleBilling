@@ -30,10 +30,7 @@ public sealed class CustomerRepository : ICustomerRepository
             Money.Zero,
             DateTimeOffset.UtcNow);
 
-        await _dbContext.Customers.AddAsync(
-            customer,
-            cancellationToken);
-
+        await _dbContext.Customers.AddAsync(customer, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new CustomerDto(

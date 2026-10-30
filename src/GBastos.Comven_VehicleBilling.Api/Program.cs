@@ -1,3 +1,4 @@
+using Comven_VehicleBilling.Api.Endpoints;
 using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure;
 using Comven_VehicleBilling.Infrastructure.Persistence;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // ======================================================
-// 1. CONFIGURAÇÃO
+// 1. CONFIGURATION
 // ======================================================
 
 builder.Configuration
@@ -23,10 +24,10 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // ======================================================
-// 2. SERVIÇOS DA API
+// 2. SERVIÃ‡OS DA API
 // ======================================================
 
-// Swagger / documentação da API
+// Swagger / API documentation
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -61,25 +62,25 @@ builder.Services.AddCors(options =>
 });
 
 // ======================================================
-// 4. INJEÇÃO DE DEPENDÊNCIAS
+// 4. DEPENDENCY INJECTION
 // ======================================================
 
 // Camada Application:
-// casos de uso e serviços da aplicação.
+// casos de uso e serviÃ§os da aplicaÃ§Ã£o.
 builder.Services.AddApplication();
 
 // Camada Infrastructure:
-// banco de dados, repositórios e integrações.
+// banco de dados, repositÃ³rios e integraÃ§Ãµes.
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // ======================================================
-// 5. CONSTRUÇÃO DA APLICAÇÃO
+// 5. APPLICATION BUILD
 // ======================================================
 
 var app = builder.Build();
 
 // ======================================================
-// 6. TRATAMENTO GLOBAL DE EXCEÇÕES
+// 6. GLOBAL EXCEPTION HANDLING
 // ======================================================
 
 app.UseExceptionHandler(errorApp =>
@@ -123,11 +124,11 @@ app.UseHttpsRedirection();
 app.UseCors(CorsPolicy);
 
 // ======================================================
-// 9. ENDPOINTS DE SAÚDE
+// 9. HEALTH ENDPOINTS
 // ======================================================
 
 // GET /health
-// Verifica se a API está respondendo.
+// Checks whether the API is responding.
 app.MapGet("/health", () =>
 {
   return Results.Ok(new
@@ -155,7 +156,7 @@ app.MapGet(
       {
         return Results.Problem(
             statusCode: StatusCodes.Status503ServiceUnavailable,
-            title: "Banco de dados indisponível");
+            title: "Banco de dados indisponÃ­vel");
       }
 
       return Results.Ok(new
@@ -169,19 +170,19 @@ app.MapGet(
     .WithTags("Health");
 
 // ======================================================
-// 10. ENDPOINTS DE NEGÓCIO
+// 10. BUSINESS ENDPOINTS
 // ======================================================
 
-// Descomente somente se estes métodos de extensão
+// Enable only if these extension methods exist.
 // existirem com estes nomes no seu projeto.
 //
-// app.MapCustomerEndpoints();
-// app.MapOperationEndpoints();
+app.MapCustomerEndpoints();
+app.MapOperationEndpoints();
 // app.MapStatementEndpoints();
 // app.MapInvoiceEndpoints();
 
 // ======================================================
-// 11. EXECUÇÃO
+// 11. EXECUTION
 // ======================================================
 
 app.Run();

@@ -8,14 +8,14 @@ namespace Comven_VehicleBilling.Application;
 
 public static class DependencyInjection
 {
-  public static IServiceCollection AddApplication(
-      this IServiceCollection services)
-  {
-    services.AddScoped<CustomerService>();
-    services.AddScoped<OperationService>();
-    services.AddScoped<StatementService>();
-    services.AddScoped<InvoiceService>();
+    public static IServiceCollection AddApplication(
+        this IServiceCollection services)
+    {
+        services.AddScoped<CustomerService>();
+        services.AddScoped<OperationService>();
+        services.AddScoped<StatementService>();
+        services.AddScoped<InvoiceService>();
 
-    return services;
-  }
+        return services;
+    }
 }

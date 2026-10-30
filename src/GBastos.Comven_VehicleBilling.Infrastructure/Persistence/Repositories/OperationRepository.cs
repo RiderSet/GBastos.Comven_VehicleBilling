@@ -188,7 +188,7 @@ public sealed class OperationRepository : IOperationRepository
   }
 
   private static bool IsExternalOperationIdUniqueViolation(
-    DbUpdateException exception)
+      DbUpdateException exception)
   {
     for (Exception? current = exception;
          current is not null;
@@ -202,17 +202,14 @@ public sealed class OperationRepository : IOperationRepository
 
       var constraintName = postgresException.ConstraintName;
 
-      if (string.Equals(
-              constraintName,
-              "ux_operations_external_operation_id",
-              StringComparison.Ordinal)
-          || string.Equals(
-              constraintName,
-              "ux_operations_customer_request_hash",
-              StringComparison.Ordinal))
-      {
-        return true;
-      }
+      return string.Equals(
+                 constraintName,
+                 "ux_operations_external_operation_id",
+                 StringComparison.Ordinal)
+             || string.Equals(
+                 constraintName,
+                 "ux_operations_customer_request_hash",
+                 StringComparison.Ordinal);
     }
 
     return false;

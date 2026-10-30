@@ -1,36 +1,45 @@
 using Comven_VehicleBilling.Api.Contracts.Customers;
+using Comven_VehicleBilling.Application.Customers;
 
 namespace Comven_VehicleBilling.Api.Endpoints;
 
 public static class CustomerEndpoints
 {
-  public static IEndpointRouteBuilder MapCustomerEndpoints(
-      this IEndpointRouteBuilder app)
-  {
-    var group = app.MapGroup("/api/customers")
-        .WithTags("Customers");
-
-    group.MapPost("/", (
-        CreateCustomerRequest request) =>
+    public static IEndpointRouteBuilder MapCustomerEndpoints(
+        this IEndpointRouteBuilder app)
     {
-      // Exemplo didático: aqui entraria o caso de uso
-      // da camada Application.
+        var group = app.MapGroup("/api/customers")
+            .WithTags("Customers");
 
-      var response = new CustomerResponse(
-          Guid.NewGuid(),
-          request.Name,
-          request.Document,
-          request.Email);
+        group.MapPost("/", async (
+            CreateCustomerRequest request,
+            CustomerService service,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new CreateCustomerCommand(
+                request.Name,
+                request.Document,
+                request.Email);
 
-      return Results.Created(
-          $"/api/customers/{response.Id}",
-          response);
-    })
-    .WithName("CreateCustomer")
-    .WithSummary("Cadastra um cliente")
-    .Produces<CustomerResponse>(
-        StatusCodes.Status201Created);
+            var customer = await service.CreateAsync(
+                command,
+                cancellationToken);
 
-    return app;
-  }
+            var response = new CustomerResponse(
+                customer.Id,
+                customer.Name,
+                customer.Document,
+                customer.Email);
+
+            return Results.Created(
+                $"/api/customers/{response.Id}",
+                response);
+        })
+        .WithName("CreateCustomer")
+        .WithSummary("Cadastra um cliente")
+        .Produces<CustomerResponse>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        return app;
+    }
 }
