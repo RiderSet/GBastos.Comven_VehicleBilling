@@ -22,6 +22,10 @@ public sealed class OperationConfiguration
         .HasColumnName("external_operation_id")
         .IsRequired();
 
+    builder.HasIndex(operation => operation.ExternalOperationId)
+    .IsUnique()
+    .HasDatabaseName("ux_operations_external_operation_id");
+
     builder.Property(operation => operation.CustomerId)
         .HasColumnName("customer_id")
         .IsRequired();

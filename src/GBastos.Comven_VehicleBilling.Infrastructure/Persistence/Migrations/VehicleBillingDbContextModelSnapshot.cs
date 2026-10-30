@@ -213,6 +213,10 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExternalOperationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_operations_external_operation_id");
+
                     b.HasIndex("InvoiceId")
                         .HasDatabaseName("ix_operations_invoice_id");
 
