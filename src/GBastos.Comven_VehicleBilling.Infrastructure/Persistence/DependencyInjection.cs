@@ -21,6 +21,7 @@ public static class DependencyInjection
     services.AddSingleton<IBillingProvider, BillingProvider>();
     services.AddSingleton<RabbitMqPublisher>();
     services.AddScoped<ICustomerRepository, CustomerRepository>();
+    services.AddScoped<IOperationRepository, OperationRepository>();
 
     return services;
   }

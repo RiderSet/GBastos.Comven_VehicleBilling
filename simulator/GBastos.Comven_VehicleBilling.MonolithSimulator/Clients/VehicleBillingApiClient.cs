@@ -1,3 +1,6 @@
+using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
+using System.Net.Http.Json;
+
 namespace Comven_VehicleBilling.MonolithSimulator.Clients;
 
 internal sealed class VehicleBillingApiClient
@@ -13,8 +16,18 @@ internal sealed class VehicleBillingApiClient
   public Task<HttpResponseMessage> GetHealthAsync(
       CancellationToken cancellationToken = default)
   {
-    return _httpClient.GetAsync(
-        "health",
+    return _httpClient.GetAsync("health", cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> CreateOperationAsync(
+      CreateOperationRequest request,
+      CancellationToken cancellationToken = default)
+  {
+    ArgumentNullException.ThrowIfNull(request);
+
+    return _httpClient.PostAsJsonAsync(
+        "api/operations",
+        request,
         cancellationToken);
   }
 }
