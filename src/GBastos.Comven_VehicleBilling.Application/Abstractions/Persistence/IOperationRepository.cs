@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Application.Operations;
+using Comven_VehicleBilling.Application.Operations;
 
 namespace Comven_VehicleBilling.Application.Abstractions.Persistence;
 
@@ -12,7 +12,9 @@ public interface IOperationRepository
         Guid id,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<OperationDto>> GetAllAsync(
-        Guid? customerId = null,
-        CancellationToken cancellationToken = default);
+  Task<IReadOnlyList<OperationDto>> GetAllAsync(
+      Guid? customerId,
+      int page,
+      int pageSize,
+      CancellationToken cancellationToken = default);
 }

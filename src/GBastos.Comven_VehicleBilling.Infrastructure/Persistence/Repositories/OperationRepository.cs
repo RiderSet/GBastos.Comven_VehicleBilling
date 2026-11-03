@@ -237,7 +237,9 @@ public sealed class OperationRepository : IOperationRepository
   }
 
   public async Task<IReadOnlyList<OperationDto>> GetAllAsync(
-      Guid? customerId = null,
+      Guid? customerId,
+      int page,
+      int pageSize,
       CancellationToken cancellationToken = default)
   {
     var query = _dbContext.Operations
@@ -247,12 +249,14 @@ public sealed class OperationRepository : IOperationRepository
     if (customerId.HasValue)
     {
       query = query.Where(
-          operation =>
-              operation.CustomerId == customerId.Value);
+          operation => operation.CustomerId == customerId.Value);
     }
 
     var operations = await query
         .OrderByDescending(operation => operation.CreatedAt)
+        .ThenByDescending(operation => operation.Id)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
         .ToListAsync(cancellationToken);
 
     return operations
