@@ -49,4 +49,27 @@ internal sealed class VehicleBillingApiClient
             request,
             cancellationToken);
     }
+
+public Task<HttpResponseMessage> CreditBalanceAsync(
+    Guid customerId,
+    string externalReference,
+    decimal amount,
+    CancellationToken cancellationToken = default)
+{
+    ArgumentException.ThrowIfNullOrWhiteSpace(externalReference);
+
+    if (amount <= 0)
+        throw new ArgumentOutOfRangeException(nameof(amount));
+
+    var request = new
+    {
+        ExternalReference = externalReference,
+        Amount = amount
+    };
+
+    return _httpClient.PostAsJsonAsync(
+        $"api/customers/{customerId}/balance/credits",
+        request,
+        cancellationToken);
+}
 }

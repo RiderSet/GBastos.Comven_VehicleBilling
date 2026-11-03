@@ -11,7 +11,8 @@ public sealed class StatementRepository : IStatementRepository
 
     public StatementRepository(VehicleBillingDbContext dbContext)
     {
-        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _dbContext = dbContext
+            ?? throw new ArgumentNullException(nameof(dbContext));
     }
 
     public async Task<StatementDto?> GetAsync(
@@ -22,33 +23,41 @@ public sealed class StatementRepository : IStatementRepository
 
         var customerExists = await _dbContext.Customers
             .AsNoTracking()
-            .AnyAsync(c => c.Id == query.CustomerId, cancellationToken);
+            .AnyAsync(
+                customer => customer.Id == query.CustomerId,
+                cancellationToken);
 
         if (!customerExists)
             return null;
 
         var start = new DateTimeOffset(
-            query.StartDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query.StartDate.ToDateTime(TimeOnly.MinValue),
+            TimeSpan.Zero);
 
         var endExclusive = new DateTimeOffset(
-            query.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue),
+            TimeSpan.Zero);
 
         var entries = await _dbContext.LedgerEntries
             .AsNoTracking()
-            .Where(e =>
-                e.CustomerId == query.CustomerId &&
-                e.CreatedAt >= start &&
-                e.CreatedAt < endExclusive)
-            .Select(e => new { e.Type, Amount = e.Amount.Amount })
+            .Where(entry =>
+                entry.CustomerId == query.CustomerId &&
+                entry.CreatedAt >= start &&
+                entry.CreatedAt < endExclusive)
+            .Select(entry => new
+            {
+                entry.Type,
+                Amount = entry.Amount.Amount
+            })
             .ToListAsync(cancellationToken);
 
         var credits = entries
-            .Where(e => e.Type == LedgerEntryType.Credit)
-            .Sum(e => e.Amount);
+            .Where(entry => entry.Type == LedgerEntryType.Credit)
+            .Sum(entry => entry.Amount);
 
         var debits = entries
-            .Where(e => e.Type == LedgerEntryType.Debit)
-            .Sum(e => e.Amount);
+            .Where(entry => entry.Type == LedgerEntryType.Debit)
+            .Sum(entry => entry.Amount);
 
         return new StatementDto(
             query.CustomerId,
