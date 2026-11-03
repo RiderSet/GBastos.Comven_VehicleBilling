@@ -1,5 +1,5 @@
-﻿using Comven_VehicleBilling.Application.Operations;
-using Comven_VehicleBilling.Api.Contracts.Operations;
+﻿using Comven_VehicleBilling.Api.Contracts.Operations;
+using Comven_VehicleBilling.Application.Operations;
 
 namespace Comven_VehicleBilling.Api.Endpoints;
 
@@ -73,15 +73,15 @@ public static class OperationEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            var isCustomerNotFound = ex.Message.Contains(
+            var customerNotFound = ex.Message.Contains(
                 "cliente informado não foi encontrado",
                 StringComparison.OrdinalIgnoreCase);
 
             return Results.Problem(
-                statusCode: isCustomerNotFound
+                statusCode: customerNotFound
                     ? StatusCodes.Status404NotFound
                     : StatusCodes.Status409Conflict,
-                title: isCustomerNotFound
+                title: customerNotFound
                     ? "Cliente não encontrado"
                     : "Não foi possível registrar a operação",
                 detail: ex.Message);
@@ -93,13 +93,23 @@ public static class OperationEndpoints
         OperationService service,
         CancellationToken cancellationToken)
     {
-        var operation = await service.GetByIdAsync(
-            id,
-            cancellationToken);
+        try
+        {
+            var operation = await service.GetByIdAsync(
+                id,
+                cancellationToken);
 
-        return operation is null
-            ? Results.NotFound()
-            : Results.Ok(ToResponse(operation));
+            return operation is null
+                ? Results.NotFound()
+                : Results.Ok(ToResponse(operation));
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Identificador inválido",
+                detail: ex.Message);
+        }
     }
 
     private static async Task<IResult> GetOperations(
@@ -107,11 +117,22 @@ public static class OperationEndpoints
         OperationService service,
         CancellationToken cancellationToken)
     {
-        var operations = await service.GetAllAsync(
-            customerId,
-            cancellationToken);
+        try
+        {
+            var operations = await service.GetAllAsync(
+                customerId,
+                cancellationToken);
 
-        return Results.Ok(operations.Select(ToResponse).ToList());
+            return Results.Ok(
+                operations.Select(ToResponse).ToArray());
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Filtro inválido",
+                detail: ex.Message);
+        }
     }
 
     private static OperationResponse ToResponse(OperationDto operation)

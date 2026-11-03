@@ -22,6 +22,41 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.BalanceCredit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("ExternalReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_reference");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("ExternalReference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_balance_credits_external_reference");
+
+                    b.ToTable("balance_credits", (string)null);
+                });
+
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -302,6 +337,17 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_outbox_messages_pending");
 
                     b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.BalanceCredit", b =>
+                {
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.Invoice", b =>

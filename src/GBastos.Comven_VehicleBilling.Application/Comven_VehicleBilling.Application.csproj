@@ -8,6 +8,10 @@
     <ProjectReference Include="..\GBastos.Comven_VehicleBilling.Domain\Comven_VehicleBilling.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="BalanceCredits\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

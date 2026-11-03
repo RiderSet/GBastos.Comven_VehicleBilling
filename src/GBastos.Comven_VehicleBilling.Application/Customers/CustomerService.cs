@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 namespace Comven_VehicleBilling.Application.Customers;
 
@@ -17,28 +17,15 @@ public sealed class CustomerService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
-        cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(command.Name))
-        {
-            throw new ArgumentException(
-                "O nome e obrigatorio.",
-                nameof(command));
-        }
+            throw new ArgumentException("O nome é obrigatório.", nameof(command));
 
         if (string.IsNullOrWhiteSpace(command.Document))
-        {
-            throw new ArgumentException(
-                "O documento e obrigatorio.",
-                nameof(command));
-        }
+            throw new ArgumentException("O documento é obrigatório.", nameof(command));
 
         if (string.IsNullOrWhiteSpace(command.Email))
-        {
-            throw new ArgumentException(
-                "O e-mail e obrigatorio.",
-                nameof(command));
-        }
+            throw new ArgumentException("O e-mail é obrigatório.", nameof(command));
 
         return await _repository.CreateAsync(
             command,
@@ -50,11 +37,9 @@ public sealed class CustomerService
         CancellationToken cancellationToken = default)
     {
         if (id == Guid.Empty)
-        {
             throw new ArgumentException(
-                "O identificador do cliente e invalido.",
+                "O identificador do cliente é inválido.",
                 nameof(id));
-        }
 
         return await _repository.GetByIdAsync(
             id,

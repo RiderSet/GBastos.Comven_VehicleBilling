@@ -1,74 +1,82 @@
-using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 namespace Comven_VehicleBilling.Application.Operations;
 
 public sealed class OperationService
 {
-  private readonly IOperationRepository _repository;
+    private readonly IOperationRepository _repository;
 
-  public OperationService(IOperationRepository repository)
-  {
-    _repository = repository
-        ?? throw new ArgumentNullException(nameof(repository));
-  }
+    public OperationService(IOperationRepository repository)
+    {
+        _repository = repository
+            ?? throw new ArgumentNullException(nameof(repository));
+    }
 
-  public async Task<OperationDto> CreateAsync(
-      CreateOperationCommand command,
-      CancellationToken cancellationToken = default)
-  {
-    ArgumentNullException.ThrowIfNull(command);
-    cancellationToken.ThrowIfCancellationRequested();
+    public async Task<OperationDto> CreateAsync(
+        CreateOperationCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
 
-    if (command.ExternalOperationId == Guid.Empty)
-      throw new ArgumentException(
-          "O identificador externo da operação é obrigatório.",
-          nameof(command));
+        if (command.ExternalOperationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "O identificador externo da operação é obrigatório.",
+                nameof(command));
+        }
 
-    if (command.CustomerId == Guid.Empty)
-      throw new ArgumentException(
-          "O identificador do cliente é obrigatório.",
-          nameof(command));
+        if (command.CustomerId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "O identificador do cliente é obrigatório.",
+                nameof(command));
+        }
 
-    if (string.IsNullOrWhiteSpace(command.OperationType))
-      throw new ArgumentException(
-          "O tipo da operação é obrigatório.",
-          nameof(command));
+        if (string.IsNullOrWhiteSpace(command.OperationType))
+        {
+            throw new ArgumentException(
+                "O tipo da operação é obrigatório.",
+                nameof(command));
+        }
 
-    if (command.Amount <= 0)
-      throw new ArgumentOutOfRangeException(
-          nameof(command),
-          "O valor deve ser maior que zero.");
+        if (command.Amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(command),
+                "O valor deve ser maior que zero.");
+        }
 
-    return await _repository.CreateAsync(
-        command,
-        cancellationToken);
-  }
+        return await _repository.CreateAsync(command, cancellationToken);
+    }
 
-  public async Task<OperationDto?> GetByIdAsync(
-      Guid id,
-      CancellationToken cancellationToken = default)
-  {
-    if (id == Guid.Empty)
-      throw new ArgumentException(
-          "O identificador da operação é inválido.",
-          nameof(id));
+    public async Task<OperationDto?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
 
-    return await _repository.GetByIdAsync(
-        id,
-        cancellationToken);
-  }
+        if (id == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "O identificador da operação é obrigatório.",
+                nameof(id));
+        }
 
-  public Task<IReadOnlyList<OperationDto>> GetAllAsync(
-      Guid? customerId = null,
-      CancellationToken cancellationToken = default)
-  {
-    if (customerId == Guid.Empty)
-      throw new ArgumentException(
-          "O identificador do cliente é inválido.",
-          nameof(customerId));
+        return await _repository.GetByIdAsync(id, cancellationToken);
+    }
 
-    return _repository.GetAllAsync(
-        customerId,
-        cancellationToken);
-  }
+    public Task<IReadOnlyList<OperationDto>> GetAllAsync(
+        Guid? customerId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (customerId.HasValue && customerId.Value == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "O identificador do cliente é inválido.",
+                nameof(customerId));
+        }
+
+        return _repository.GetAllAsync(customerId, cancellationToken);
+    }
 }

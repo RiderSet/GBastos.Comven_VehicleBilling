@@ -21,7 +21,10 @@ public static class DependencyInjection
     services.AddSingleton<IBillingProvider, BillingProvider>();
     services.AddSingleton<RabbitMqPublisher>();
     services.AddScoped<ICustomerRepository, CustomerRepository>();
+    services.AddScoped<IBalanceCreditRepository, BalanceCreditRepository>();
     services.AddScoped<IOperationRepository, OperationRepository>();
+    services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+    services.AddScoped<IStatementRepository, StatementRepository>();
 
     return services;
   }

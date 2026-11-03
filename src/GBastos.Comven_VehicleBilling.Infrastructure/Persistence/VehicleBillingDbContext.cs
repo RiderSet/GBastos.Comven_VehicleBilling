@@ -20,6 +20,7 @@ public sealed class VehicleBillingDbContext : DbContext
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<BalanceCredit> BalanceCredits => Set<BalanceCredit>();
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
