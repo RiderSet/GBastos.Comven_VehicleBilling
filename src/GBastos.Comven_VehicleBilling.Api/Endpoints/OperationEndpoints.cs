@@ -5,6 +5,9 @@ namespace Comven_VehicleBilling.Api.Endpoints;
 
 public static class OperationEndpoints
 {
+  private const int DefaultPage = 1;
+  private const int DefaultPageSize = 50;
+
   public static IEndpointRouteBuilder MapOperationEndpoints(
       this IEndpointRouteBuilder app)
   {
@@ -21,13 +24,14 @@ public static class OperationEndpoints
 
     group.MapGet("/{id:guid}", GetOperationById)
         .WithName("GetOperationById")
-        .WithSummary("Consulta uma operação")
+        .WithSummary("Consulta uma operação pelo identificador")
         .Produces<OperationResponse>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status404NotFound);
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
 
     group.MapGet("/", GetOperations)
         .WithName("GetOperations")
-        .WithSummary("Lista operações com paginação")
+        .WithSummary("Lista operações com filtros e paginação")
         .Produces<IReadOnlyList<OperationResponse>>(
             StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest);
@@ -115,15 +119,21 @@ public static class OperationEndpoints
 
   private static async Task<IResult> GetOperations(
       Guid? customerId,
+      string? operationType,
+      DateTimeOffset? startDate,
+      DateTimeOffset? endDate,
       OperationService service,
       CancellationToken cancellationToken,
-      int page = 1,
-      int pageSize = 50)
+      int page = DefaultPage,
+      int pageSize = DefaultPageSize)
   {
     try
     {
       var operations = await service.GetAllAsync(
           customerId,
+          operationType,
+          startDate,
+          endDate,
           page,
           pageSize,
           cancellationToken);

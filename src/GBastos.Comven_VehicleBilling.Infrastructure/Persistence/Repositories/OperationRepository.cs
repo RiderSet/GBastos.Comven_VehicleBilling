@@ -238,6 +238,9 @@ public sealed class OperationRepository : IOperationRepository
 
   public async Task<IReadOnlyList<OperationDto>> GetAllAsync(
       Guid? customerId,
+      string? operationType,
+      DateTimeOffset? startDate,
+      DateTimeOffset? endDate,
       int page,
       int pageSize,
       CancellationToken cancellationToken = default)
@@ -250,6 +253,35 @@ public sealed class OperationRepository : IOperationRepository
     {
       query = query.Where(
           operation => operation.CustomerId == customerId.Value);
+    }
+
+    if (!string.IsNullOrWhiteSpace(operationType))
+    {
+      if (!Enum.TryParse<OperationType>(
+              operationType,
+              true,
+              out var parsedType)
+          || !Enum.IsDefined(parsedType))
+      {
+        throw new ArgumentException(
+            "O tipo de operação informado é inválido.",
+            nameof(operationType));
+      }
+
+      query = query.Where(
+          operation => operation.Type == parsedType);
+    }
+
+    if (startDate.HasValue)
+    {
+      query = query.Where(
+          operation => operation.CreatedAt >= startDate.Value);
+    }
+
+    if (endDate.HasValue)
+    {
+      query = query.Where(
+          operation => operation.CreatedAt <= endDate.Value);
     }
 
     var operations = await query

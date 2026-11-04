@@ -4,16 +4,19 @@ namespace Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 public interface IOperationRepository
 {
-    Task<OperationDto> CreateAsync(
-        CreateOperationCommand command,
-        CancellationToken cancellationToken = default);
+  Task<OperationDto> CreateAsync(
+      CreateOperationCommand command,
+      CancellationToken cancellationToken = default);
 
-    Task<OperationDto?> GetByIdAsync(
-        Guid id,
-        CancellationToken cancellationToken = default);
+  Task<OperationDto?> GetByIdAsync(
+      Guid id,
+      CancellationToken cancellationToken = default);
 
   Task<IReadOnlyList<OperationDto>> GetAllAsync(
       Guid? customerId,
+      string? operationType,
+      DateTimeOffset? startDate,
+      DateTimeOffset? endDate,
       int page,
       int pageSize,
       CancellationToken cancellationToken = default);

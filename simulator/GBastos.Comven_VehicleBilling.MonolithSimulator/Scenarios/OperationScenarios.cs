@@ -7,6 +7,10 @@ namespace Comven_VehicleBilling.MonolithSimulator.Scenarios;
 
 internal sealed class OperationScenarios
 {
+  private const int DefaultPage = 1;
+  private const int DefaultPageSize = 50;
+  private const int MaxPageSize = 100;
+
   public async Task<int> ExecuteAsync(
       VehicleBillingApiClient apiClient)
   {
@@ -31,6 +35,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "Todos os dados do cliente são obrigatórios.");
+
       return 1;
     }
 
@@ -61,6 +66,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "A API não retornou um ID de cliente válido.");
+
       Console.Error.WriteLine(customerBody);
       return 1;
     }
@@ -83,6 +89,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "Informe um valor de crédito maior que zero.");
+
       return 1;
     }
 
@@ -105,8 +112,10 @@ internal sealed class OperationScenarios
     if (!creditResponse.IsSuccessStatusCode)
     {
       Console.Error.WriteLine(creditBody);
+
       Console.Error.WriteLine(
           "Não foi possível creditar o saldo.");
+
       return 1;
     }
 
@@ -137,6 +146,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "Informe um tipo e um valor maior que zero.");
+
       return 1;
     }
 
@@ -144,6 +154,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "O valor da operação excede o crédito informado.");
+
       return 1;
     }
 
@@ -193,6 +204,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "A API não retornou um ID de operação válido.");
+
       return 1;
     }
 
@@ -216,8 +228,10 @@ internal sealed class OperationScenarios
     if (!retryResponse.IsSuccessStatusCode)
     {
       Console.Error.WriteLine(retryBody);
+
       Console.Error.WriteLine(
           "FALHA: a API rejeitou a retentativa.");
+
       return 1;
     }
 
@@ -232,6 +246,7 @@ internal sealed class OperationScenarios
     {
       Console.Error.WriteLine(
           "A retentativa não retornou um ID válido.");
+
       return 1;
     }
 
@@ -247,16 +262,306 @@ internal sealed class OperationScenarios
     }
 
     Console.WriteLine();
-    Console.WriteLine(
-        "OK: idempotência confirmada.");
+    Console.WriteLine("OK: idempotência confirmada.");
 
     Console.WriteLine($"OperationId: {originalId}");
     Console.WriteLine(
         $"ExternalOperationId: {externalOperationId}");
 
+    // 5. Consulta das operações registradas.
+    Console.WriteLine();
+    Console.WriteLine("=== Registro de operações: consulta ===");
+
+    using var operationsResponse =
+        await apiClient.GetOperationsAsync(
+            customerId,
+            DefaultPage,
+            DefaultPageSize);
+
+    var operationsBody =
+        await operationsResponse.Content.ReadAsStringAsync();
+
     Console.WriteLine(
-        "Registro de operação concluído com sucesso.");
+        $"Consulta: {(int)operationsResponse.StatusCode} " +
+        operationsResponse.StatusCode);
+
+    if (!operationsResponse.IsSuccessStatusCode)
+    {
+      Console.Error.WriteLine(operationsBody);
+
+      Console.Error.WriteLine(
+          "Não foi possível consultar as operações.");
+
+      return 1;
+    }
+
+    using var operationsJson =
+        JsonDocument.Parse(operationsBody);
+
+    if (!TryDisplayOperations(
+            operationsJson.RootElement,
+            customerId,
+            DefaultPage,
+            DefaultPageSize))
+    {
+      Console.Error.WriteLine(
+          "A API retornou um formato inesperado na listagem.");
+
+      Console.Error.WriteLine(operationsBody);
+      return 1;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Registro e consulta de operações concluídos com sucesso.");
 
     return 0;
   }
+
+  public async Task<int> ListOperationsAsync(
+      VehicleBillingApiClient apiClient)
+  {
+    ArgumentNullException.ThrowIfNull(apiClient);
+
+    Console.WriteLine();
+    Console.WriteLine("=== Consulta independente de operações ===");
+
+    Console.Write(
+        "ID do cliente (Enter para consultar todos): ");
+
+    var customerIdText = Console.ReadLine()?.Trim();
+
+    Guid? customerId = null;
+
+    if (!string.IsNullOrWhiteSpace(customerIdText))
+    {
+      if (!Guid.TryParse(customerIdText, out var parsedId) ||
+          parsedId == Guid.Empty)
+      {
+        Console.Error.WriteLine(
+            "Informe um GUID de cliente válido.");
+
+        return 1;
+      }
+
+      customerId = parsedId;
+    }
+
+    Console.Write(
+        $"Página (padrão {DefaultPage}): ");
+
+    var pageText = Console.ReadLine()?.Trim();
+
+    var page = DefaultPage;
+
+    if (!string.IsNullOrWhiteSpace(pageText) &&
+        (!int.TryParse(
+            pageText,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out page) ||
+         page < 1))
+    {
+      Console.Error.WriteLine(
+          "A página deve ser um número inteiro maior que zero.");
+
+      return 1;
+    }
+
+    Console.Write(
+        $"Tamanho da página (padrão {DefaultPageSize}, máximo {MaxPageSize}): ");
+
+    var pageSizeText = Console.ReadLine()?.Trim();
+
+    var pageSize = DefaultPageSize;
+
+    if (!string.IsNullOrWhiteSpace(pageSizeText) &&
+        (!int.TryParse(
+            pageSizeText,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out pageSize) ||
+         pageSize < 1 ||
+         pageSize > MaxPageSize))
+    {
+      Console.Error.WriteLine(
+          $"O tamanho da página deve estar entre 1 e {MaxPageSize}.");
+
+      return 1;
+    }
+
+    using var response =
+        await apiClient.GetOperationsAsync(
+            customerId,
+            page,
+            pageSize);
+
+    var body =
+        await response.Content.ReadAsStringAsync();
+
+    Console.WriteLine();
+    Console.WriteLine(
+        $"Consulta: {(int)response.StatusCode} {response.StatusCode}");
+
+    if (!response.IsSuccessStatusCode)
+    {
+      Console.Error.WriteLine(body);
+      return 1;
+    }
+
+    using var json = JsonDocument.Parse(body);
+
+    if (!TryDisplayOperations(
+            json.RootElement,
+            customerId,
+            page,
+            pageSize))
+    {
+      Console.Error.WriteLine(
+          "A API retornou um formato inesperado na listagem.");
+
+      Console.Error.WriteLine(body);
+      return 1;
+    }
+
+    return 0;
+  }
+
+  public async Task<int> GetOperationDetailsAsync(
+    VehicleBillingApiClient apiClient)
+  {
+    ArgumentNullException.ThrowIfNull(apiClient);
+
+    Console.WriteLine();
+    Console.WriteLine("=== Detalhamento de operação ===");
+
+    Console.Write("ID da operação: ");
+    var operationIdText = Console.ReadLine()?.Trim();
+
+    if (!Guid.TryParse(operationIdText, out var operationId) ||
+        operationId == Guid.Empty)
+    {
+      Console.Error.WriteLine(
+          "Informe um identificador de operação válido.");
+
+      return 1;
+    }
+
+    using var response =
+        await apiClient.GetOperationByIdAsync(operationId);
+
+    var body =
+        await response.Content.ReadAsStringAsync();
+
+    Console.WriteLine();
+    Console.WriteLine(
+        $"Consulta: {(int)response.StatusCode} {response.StatusCode}");
+
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+      Console.WriteLine(
+          "Nenhuma operação foi encontrada com o ID informado.");
+
+      return 0;
+    }
+
+    if (!response.IsSuccessStatusCode)
+    {
+      Console.Error.WriteLine(body);
+
+      Console.Error.WriteLine(
+          "Não foi possível consultar os detalhes da operação.");
+
+      return 1;
+    }
+
+    using var json = JsonDocument.Parse(body);
+
+    if (json.RootElement.ValueKind != JsonValueKind.Object)
+    {
+      Console.Error.WriteLine(
+          "A API retornou um formato inesperado.");
+
+      Console.Error.WriteLine(body);
+      return 1;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("=== Dados da operação ===");
+
+    Console.WriteLine(
+        JsonSerializer.Serialize(
+            json.RootElement,
+            new JsonSerializerOptions
+            {
+              WriteIndented = true
+            }));
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Detalhamento da operação concluído com sucesso.");
+
+    return 0;
+  }
+
+  private static bool TryDisplayOperations(
+      JsonElement operations,
+      Guid? customerId,
+      int page,
+      int pageSize)
+  {
+    if (operations.ValueKind != JsonValueKind.Array)
+      return false;
+
+    Console.WriteLine();
+    Console.WriteLine(
+        $"Cliente: {(customerId.HasValue ? customerId.Value.ToString() : "Todos")}");
+
+    Console.WriteLine($"Página: {page}");
+    Console.WriteLine($"Tamanho da página: {pageSize}");
+    Console.WriteLine(
+        $"Operações encontradas: {operations.GetArrayLength()}");
+
+    foreach (var operation in operations.EnumerateArray())
+    {
+      var id = ReadString(operation, "id");
+      var type = ReadString(operation, "operationType");
+      var operationCustomerId =
+          ReadString(operation, "customerId");
+
+      var operationAmount =
+          operation.TryGetProperty("amount", out var amountElement)
+              ? amountElement.ToString()
+              : "N/D";
+
+      var createdAt =
+          ReadString(operation, "createdAt");
+
+      Console.WriteLine();
+      Console.WriteLine("----------------------------------------");
+      Console.WriteLine($"ID: {id}");
+      Console.WriteLine($"Cliente: {operationCustomerId}");
+      Console.WriteLine($"Tipo: {type}");
+      Console.WriteLine($"Valor: {operationAmount}");
+      Console.WriteLine($"Data: {createdAt}");
+    }
+
+    return true;
+  }
+
+  private static string ReadString(
+      JsonElement element,
+      string propertyName)
+  {
+    if (!element.TryGetProperty(
+            propertyName, out var property))
+    {
+      return "N/D";
+    }
+
+    return property.ValueKind == JsonValueKind.String
+        ? property.GetString() ?? "N/D"
+        : property.ToString();
+  }
+
 }

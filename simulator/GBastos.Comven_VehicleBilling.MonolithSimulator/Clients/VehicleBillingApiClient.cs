@@ -1,75 +1,134 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
 
 namespace Comven_VehicleBilling.MonolithSimulator.Clients;
 
 internal sealed class VehicleBillingApiClient
 {
-    private readonly HttpClient _httpClient;
+  private readonly HttpClient _httpClient;
 
-    public VehicleBillingApiClient(HttpClient httpClient)
+  public VehicleBillingApiClient(HttpClient httpClient)
+  {
+    _httpClient = httpClient
+        ?? throw new ArgumentNullException(nameof(httpClient));
+  }
+
+  public Task<HttpResponseMessage> GetHealthAsync(
+      CancellationToken cancellationToken = default)
+  {
+    return _httpClient.GetAsync(
+        "health",
+        cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> CreateCustomerAsync(
+      string name,
+      string document,
+      string email,
+      CancellationToken cancellationToken = default)
+  {
+    var request = new
     {
-        _httpClient = httpClient
-            ?? throw new ArgumentNullException(nameof(httpClient));
-    }
+      Name = name,
+      Document = document,
+      Email = email
+    };
 
-    public Task<HttpResponseMessage> GetHealthAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return _httpClient.GetAsync("health", cancellationToken);
-    }
+    return _httpClient.PostAsJsonAsync(
+        "api/customers",
+        request,
+        cancellationToken);
+  }
 
-    public Task<HttpResponseMessage> CreateCustomerAsync(
-        string name,
-        string document,
-        string email,
-        CancellationToken cancellationToken = default)
-    {
-        var request = new
-        {
-            Name = name,
-            Document = document,
-            Email = email
-        };
+  public Task<HttpResponseMessage> CreateOperationAsync(
+      CreateOperationRequest request,
+      CancellationToken cancellationToken = default)
+  {
+    ArgumentNullException.ThrowIfNull(request);
 
-        return _httpClient.PostAsJsonAsync(
-            "api/customers",
-            request,
-            cancellationToken);
-    }
+    return _httpClient.PostAsJsonAsync(
+        "api/operations",
+        request,
+        cancellationToken);
+  }
 
-    public Task<HttpResponseMessage> CreateOperationAsync(
-        CreateOperationRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        return _httpClient.PostAsJsonAsync(
-            "api/operations",
-            request,
-            cancellationToken);
-    }
-
-public Task<HttpResponseMessage> CreditBalanceAsync(
-    Guid customerId,
-    string externalReference,
-    decimal amount,
-    CancellationToken cancellationToken = default)
-{
+  public Task<HttpResponseMessage> CreditBalanceAsync(
+      Guid customerId,
+      string externalReference,
+      decimal amount,
+      CancellationToken cancellationToken = default)
+  {
     ArgumentException.ThrowIfNullOrWhiteSpace(externalReference);
 
+    if (customerId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é obrigatório.",
+          nameof(customerId));
+
     if (amount <= 0)
-        throw new ArgumentOutOfRangeException(nameof(amount));
+      throw new ArgumentOutOfRangeException(
+          nameof(amount),
+          "O valor deve ser maior que zero.");
 
     var request = new
     {
-        ExternalReference = externalReference,
-        Amount = amount
+      ExternalReference = externalReference,
+      Amount = amount
     };
 
     return _httpClient.PostAsJsonAsync(
         $"api/customers/{customerId}/balance/credits",
         request,
         cancellationToken);
-}
+  }
+
+  public Task<HttpResponseMessage> GetOperationsAsync(
+      Guid? customerId = null,
+      int page = 1,
+      int pageSize = 50,
+      CancellationToken cancellationToken = default)
+  {
+    if (customerId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é inválido.",
+          nameof(customerId));
+
+    if (page < 1)
+      throw new ArgumentOutOfRangeException(nameof(page));
+
+    if (pageSize < 1 || pageSize > 100)
+      throw new ArgumentOutOfRangeException(nameof(pageSize));
+
+    var query = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}"
+        };
+
+    if (customerId.HasValue)
+      query.Add($"customerId={Uri.EscapeDataString(customerId.Value.ToString())}");
+
+    var url = $"api/operations?{string.Join("&", query)}";
+
+    return _httpClient.GetAsync(
+        url,
+        cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> GetOperationByIdAsync(
+    Guid operationId,
+    CancellationToken cancellationToken = default)
+  {
+    if (operationId == Guid.Empty)
+    {
+      throw new ArgumentException(
+          "O identificador da operação é obrigatório.",
+          nameof(operationId));
+    }
+
+    return _httpClient.GetAsync(
+        $"api/operations/{operationId}",
+        cancellationToken);
+  }
+
 }
