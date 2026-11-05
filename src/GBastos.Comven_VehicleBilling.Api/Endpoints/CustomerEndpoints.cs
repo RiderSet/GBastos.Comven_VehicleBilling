@@ -74,59 +74,59 @@ public static class CustomerEndpoints
         .Produces<CustomerResponse>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
-        group.MapPost("/{customerId:guid}/balance/credits",
-            async Task<IResult> (
-                Guid customerId,
-                CreateBalanceCreditRequest request,
-                BalanceCreditService service,
-                CancellationToken cancellationToken) =>
+    group.MapPost("/{customerId:guid}/balance/credits",
+        async Task<IResult> (
+            Guid customerId,
+            CreateBalanceCreditRequest request,
+            BalanceCreditService service,
+            CancellationToken cancellationToken) =>
+        {
+          try
+          {
+            var result = await service.CreditAsync(
+                    customerId,
+                    request.ExternalReference,
+                    request.Amount,
+                    cancellationToken);
+
+            if (result.AlreadyProcessed)
+              return Results.Ok(result);
+
+            return Results.Created(
+                    $"/api/customers/{customerId}/balance/credits/{result.CreditId}",
+                    result);
+          }
+          catch (ArgumentException exception)
+          {
+            return Results.BadRequest(new
             {
-                try
-                {
-                    var result = await service.CreditAsync(
-                        customerId,
-                        request.ExternalReference,
-                        request.Amount,
-                        cancellationToken);
+              error = exception.Message
+            });
+          }
+          catch (KeyNotFoundException exception)
+          {
+            return Results.NotFound(new
+            {
+              error = exception.Message
+            });
+          }
+          catch (InvalidOperationException exception)
+          {
+            return Results.Conflict(new
+            {
+              error = exception.Message
+            });
+          }
+        })
+        .WithName("CreateBalanceCredit")
+        .WithSummary("Adiciona saldo pré-pago ao cliente")
+        .Produces<BalanceCreditResult>(StatusCodes.Status201Created)
+        .Produces<BalanceCreditResult>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
-                    if (result.AlreadyProcessed)
-                        return Results.Ok(result);
-
-                    return Results.Created(
-                        $"/api/customers/{customerId}/balance/credits/{result.CreditId}",
-                        result);
-                }
-                catch (ArgumentException exception)
-                {
-                    return Results.BadRequest(new
-                    {
-                        error = exception.Message
-                    });
-                }
-                catch (KeyNotFoundException exception)
-                {
-                    return Results.NotFound(new
-                    {
-                        error = exception.Message
-                    });
-                }
-                catch (InvalidOperationException exception)
-                {
-                    return Results.Conflict(new
-                    {
-                        error = exception.Message
-                    });
-                }
-            })
-            .WithName("CreateBalanceCredit")
-            .WithSummary("Adiciona saldo pré-pago ao cliente")
-            .Produces<BalanceCreditResult>(StatusCodes.Status201Created)
-            .Produces<BalanceCreditResult>(StatusCodes.Status200OK)
-            .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
-
-        return app;
+    return app;
     }
 }
 

@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Api.Endpoints;
+using Comven_VehicleBilling.Api.Endpoints;
 using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
@@ -51,22 +51,31 @@ var app = builder.Build();
 
 app.UseExceptionHandler(errorApp =>
 {
-    errorApp.Run(async context =>
+  errorApp.Run(async context =>
+  {
+    var exception = context.Features
+        .Get<IExceptionHandlerFeature>()?.Error;
+
+    if (exception is not null)
     {
-        var exception = context.Features
-            .Get<IExceptionHandlerFeature>()?.Error;
+      app.Logger.LogError(
+          exception,
+          "Erro não tratado em {Method} {Path}",
+          context.Request.Method,
+          context.Request.Path);
+    }
 
-        var detail = app.Environment.IsDevelopment()
-            ? exception?.Message
-            : "Ocorreu um erro inesperado. Tente novamente mais tarde.";
+    var detail = app.Environment.IsDevelopment()
+        ? exception?.Message
+        : "Ocorreu um erro inesperado. Tente novamente mais tarde.";
 
-        await Results.Problem(
-            statusCode: StatusCodes.Status500InternalServerError,
-            title: "Erro interno do servidor",
-            detail: detail,
-            instance: context.Request.Path)
-            .ExecuteAsync(context);
-    });
+    await Results.Problem(
+        statusCode: StatusCodes.Status500InternalServerError,
+        title: "Erro interno do servidor",
+        detail: detail,
+        instance: context.Request.Path)
+        .ExecuteAsync(context);
+  });
 });
 
 if (app.Environment.IsDevelopment())

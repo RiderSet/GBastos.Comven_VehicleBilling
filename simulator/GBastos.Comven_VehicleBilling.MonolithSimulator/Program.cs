@@ -41,38 +41,54 @@ try
     return 1;
   }
 
-  Console.WriteLine();
-  Console.WriteLine("Selecione uma opção:");
-  Console.WriteLine("1 - Executar cenário completo");
-  Console.WriteLine("2 - Consultar operações");
-  Console.WriteLine("3 - Detalhar operação pelo ID");
-  Console.WriteLine("0 - Sair");
-  Console.WriteLine();
-
-  Console.Write("Opção: ");
-
-  var option = Console.ReadLine()?.Trim();
-
   var scenario = new OperationScenarios();
 
-  switch (option)
+  while (true)
   {
-    case "1":
-      return await scenario.ExecuteAsync(apiClient);
+    Console.WriteLine();
+    Console.WriteLine("Selecione uma opção:");
+    Console.WriteLine();
+    Console.WriteLine("1 - Registrar operação");
+    Console.WriteLine("2 - Consultar operações");
+    Console.WriteLine("3 - Consultar operação por ID");
+    Console.WriteLine("4 - Executar cenário completo");
+    Console.WriteLine("0 - Encerrar");
+    Console.WriteLine();
 
-    case "2":
-      return await scenario.ListOperationsAsync(apiClient);
+    Console.Write("Opção: ");
 
-    case "3":
-      return await scenario.GetOperationDetailsAsync(apiClient);
+    var option = Console.ReadLine()?.Trim();
 
-    case "0":
-      Console.WriteLine("Simulador encerrado.");
-      return 0;
+    switch (option)
+    {
+      case "1":
+        await scenario.RegisterOperationAsync(apiClient);
+        break;
 
-    default:
-      Console.Error.WriteLine("Opção inválida.");
-      return 1;
+      case "2":
+        await scenario.ListOperationsAsync(apiClient);
+        break;
+
+      case "3":
+        await scenario.GetOperationDetailsAsync(apiClient);
+        break;
+
+      case "4":
+        await scenario.ExecuteAsync(apiClient);
+        break;
+
+      case "0":
+        Console.WriteLine("Simulador encerrado.");
+        return 0;
+
+      default:
+        Console.Error.WriteLine("Opção inválida.");
+        break;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Pressione ENTER para voltar ao menu...");
+    Console.ReadLine();
   }
 }
 catch (HttpRequestException ex)

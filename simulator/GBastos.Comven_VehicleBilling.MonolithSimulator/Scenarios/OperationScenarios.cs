@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Comven_VehicleBilling.MonolithSimulator.Clients;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
+using Comven_VehicleBilling.MonolithSimulator.Models.Enums;
 
 namespace Comven_VehicleBilling.MonolithSimulator.Scenarios;
 
@@ -10,6 +11,121 @@ internal sealed class OperationScenarios
   private const int DefaultPage = 1;
   private const int DefaultPageSize = 50;
   private const int MaxPageSize = 100;
+
+  public async Task<int> RegisterOperationAsync(
+    VehicleBillingApiClient apiClient)
+  {
+    ArgumentNullException.ThrowIfNull(apiClient);
+
+    Console.WriteLine();
+    Console.WriteLine("=== Registro independente de operação ===");
+
+    Console.Write("ID do cliente: ");
+    var customerIdText = Console.ReadLine()?.Trim();
+
+    if (!Guid.TryParse(customerIdText, out var customerId) ||
+        customerId == Guid.Empty)
+    {
+      Console.Error.WriteLine("Informe um GUID de cliente válido.");
+      return 1;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Tipos de operação disponíveis:");
+
+    foreach (var type in Enum.GetValues<OperationType>())
+    {
+      Console.WriteLine($"{(int)type} - {type}");
+    }
+
+    Console.Write("Tipo da operação: ");
+    var operationTypeText = Console.ReadLine()?.Trim();
+
+    if (!Enum.TryParse<OperationType>(
+            operationTypeText,
+            true,
+            out var operationType) ||
+        !Enum.IsDefined(operationType))
+    {
+      Console.Error.WriteLine("Tipo de operação inválido.");
+      return 1;
+    }
+
+    Console.Write("Valor (ex.: 25,90): ");
+    var amountText = Console.ReadLine()?.Trim();
+
+    if (!decimal.TryParse(
+            amountText,
+            NumberStyles.Number,
+            CultureInfo.GetCultureInfo("pt-BR"),
+            out var amount) ||
+        amount <= 0)
+    {
+      Console.Error.WriteLine(
+          "Informe um valor maior que zero.");
+
+      return 1;
+    }
+
+    Console.Write(
+        "ExternalOperationId (Enter para gerar automaticamente): ");
+
+    var externalOperationIdText = Console.ReadLine()?.Trim();
+
+    var externalOperationId = Guid.NewGuid();
+
+    if (!string.IsNullOrWhiteSpace(externalOperationIdText) &&
+        (!Guid.TryParse(
+            externalOperationIdText,
+            out externalOperationId) ||
+         externalOperationId == Guid.Empty))
+    {
+      Console.Error.WriteLine(
+          "ExternalOperationId inválido.");
+
+      return 1;
+    }
+
+    var request = new CreateOperationRequest(
+        externalOperationId,
+        customerId,
+        operationType.ToString(),
+        amount);
+
+    using var response =
+        await apiClient.CreateOperationAsync(request);
+
+    var body = await response.Content.ReadAsStringAsync();
+
+    Console.WriteLine();
+    Console.WriteLine(
+        $"Registro: {(int)response.StatusCode} {response.StatusCode}");
+
+    if (!response.IsSuccessStatusCode)
+    {
+      Console.Error.WriteLine(body);
+      return 1;
+    }
+
+    using var json = JsonDocument.Parse(body);
+
+    Console.WriteLine();
+    Console.WriteLine("Operação registrada:");
+
+    Console.WriteLine(
+        JsonSerializer.Serialize(
+            json.RootElement,
+            new JsonSerializerOptions
+            {
+              WriteIndented = true
+            }));
+
+    Console.WriteLine();
+    Console.WriteLine($"ExternalOperationId: {externalOperationId}");
+    Console.WriteLine("Registro concluído.");
+
+    return 0;
+  }
 
   public async Task<int> ExecuteAsync(
       VehicleBillingApiClient apiClient)

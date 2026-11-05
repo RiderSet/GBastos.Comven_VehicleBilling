@@ -380,7 +380,8 @@ public sealed class OperationIdempotencyTests
       var results = await Task.WhenAll(taskA, taskB);
 
       var successfulOperation = Assert.Single(
-          results.Where(result => result is not null));
+          results,
+          result => result is not null)!;
 
       Assert.Equal(externalId, successfulOperation.ExternalOperationId);
 
