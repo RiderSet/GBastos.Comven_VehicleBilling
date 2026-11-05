@@ -9,7 +9,23 @@ public sealed class LedgerEntryConfiguration
 {
   public void Configure(EntityTypeBuilder<LedgerEntry> builder)
   {
-    builder.ToTable("ledger_entries");
+    builder.ToTable(
+        "ledger_entries",
+        table => table.HasCheckConstraint(
+            "ck_ledger_entries_exactly_one_origin",
+            """
+                (
+                    "operation_id" IS NOT NULL
+                    AND "balance_credit_id" IS NULL
+                    AND "type" = 1
+                )
+                OR
+                (
+                    "operation_id" IS NULL
+                    AND "balance_credit_id" IS NOT NULL
+                    AND "type" = 2
+                )
+                """));
 
     builder.HasKey(entry => entry.Id);
 
@@ -23,7 +39,11 @@ public sealed class LedgerEntryConfiguration
 
     builder.Property(entry => entry.OperationId)
         .HasColumnName("operation_id")
-        .IsRequired();
+        .IsRequired(false);
+
+    builder.Property(entry => entry.BalanceCreditId)
+        .HasColumnName("balance_credit_id")
+        .IsRequired(false);
 
     builder.Property(entry => entry.Type)
         .HasColumnName("type")
@@ -57,6 +77,11 @@ public sealed class LedgerEntryConfiguration
         .HasForeignKey(entry => entry.OperationId)
         .OnDelete(DeleteBehavior.Restrict);
 
+    builder.HasOne<BalanceCredit>()
+        .WithMany()
+        .HasForeignKey(entry => entry.BalanceCreditId)
+        .OnDelete(DeleteBehavior.Restrict);
+
     builder.HasIndex(entry => new
     {
       entry.CustomerId,
@@ -70,6 +95,16 @@ public sealed class LedgerEntryConfiguration
       entry.Type
     })
         .IsUnique()
+        .HasFilter("\"operation_id\" IS NOT NULL")
         .HasDatabaseName("ux_ledger_entries_operation_type");
+
+    builder.HasIndex(entry => new
+    {
+      entry.BalanceCreditId,
+      entry.Type
+    })
+        .IsUnique()
+        .HasFilter("\"balance_credit_id\" IS NOT NULL")
+        .HasDatabaseName("ux_ledger_entries_balance_credit_type");
   }
 }

@@ -1,4 +1,5 @@
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Domain.Enums;
 
 namespace Comven_VehicleBilling.Application.Operations;
 
@@ -26,21 +27,21 @@ public sealed class OperationService
     if (command.ExternalOperationId == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador externo da operação é obrigatório.",
+          "O identificador externo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(command));
     }
 
     if (command.CustomerId == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador do cliente é obrigatório.",
+          "O identificador do cliente Ã© obrigatÃ³rio.",
           nameof(command));
     }
 
     if (string.IsNullOrWhiteSpace(command.OperationType))
     {
       throw new ArgumentException(
-          "O tipo da operação é obrigatório.",
+          "O tipo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(command));
     }
 
@@ -56,7 +57,7 @@ public sealed class OperationService
         cancellationToken);
   }
 
-  public async Task<OperationDto?> GetByIdAsync(
+  public async Task<OperationDetailDto?> GetByIdAsync(
       Guid id,
       CancellationToken cancellationToken = default)
   {
@@ -65,7 +66,7 @@ public sealed class OperationService
     if (id == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador da operação é obrigatório.",
+          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(id));
     }
 
@@ -74,13 +75,14 @@ public sealed class OperationService
         cancellationToken);
   }
 
-  public Task<IReadOnlyList<OperationDto>> GetAllAsync(
+  public Task<OperationPagedResult> GetAllAsync(
       Guid? customerId = null,
       string? operationType = null,
       DateTimeOffset? startDate = null,
       DateTimeOffset? endDate = null,
       int page = DefaultPage,
       int pageSize = DefaultPageSize,
+      string? status = null,
       CancellationToken cancellationToken = default)
   {
     cancellationToken.ThrowIfCancellationRequested();
@@ -88,7 +90,7 @@ public sealed class OperationService
     if (customerId.HasValue && customerId.Value == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador do cliente é inválido.",
+          "O identificador do cliente Ã© invÃ¡lido.",
           nameof(customerId));
     }
 
@@ -96,21 +98,38 @@ public sealed class OperationService
     {
       throw new ArgumentOutOfRangeException(
           nameof(page),
-          "A página deve ser maior que zero.");
+          "A pÃ¡gina deve ser maior que zero.");
+    }
+
+    if (status is not null)
+    {
+      if (string.IsNullOrWhiteSpace(status)
+          || !Enum.TryParse<OperationStatus>(
+              status.Trim(),
+              true,
+              out var parsedStatus)
+          || !Enum.IsDefined(parsedStatus))
+      {
+        throw new ArgumentException(
+            "O status da operação informado é inválido.",
+            nameof(status));
+      }
+
+      status = parsedStatus.ToString();
     }
 
     if (pageSize < 1 || pageSize > MaxPageSize)
     {
       throw new ArgumentOutOfRangeException(
           nameof(pageSize),
-          $"O tamanho da página deve estar entre 1 e {MaxPageSize}.");
+          $"O tamanho da pÃ¡gina deve estar entre 1 e {MaxPageSize}.");
     }
 
     if (page > int.MaxValue / pageSize)
     {
       throw new ArgumentOutOfRangeException(
           nameof(page),
-          "O número da página é muito grande.");
+          "O nÃºmero da pÃ¡gina Ã© muito grande.");
     }
 
     if (startDate.HasValue
@@ -118,14 +137,14 @@ public sealed class OperationService
         && startDate.Value > endDate.Value)
     {
       throw new ArgumentException(
-          "A data inicial não pode ser posterior à data final.");
+          "A data inicial nÃ£o pode ser posterior Ã  data final.");
     }
 
     if (operationType is not null
         && string.IsNullOrWhiteSpace(operationType))
     {
       throw new ArgumentException(
-          "O tipo da operação informado é inválido.",
+          "O tipo da operaÃ§Ã£o informado Ã© invÃ¡lido.",
           nameof(operationType));
     }
 
@@ -138,6 +157,8 @@ public sealed class OperationService
         endDate,
         page,
         pageSize,
-        cancellationToken);
+        cancellationToken,
+        status);
   }
 }
+

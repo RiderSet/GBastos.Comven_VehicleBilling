@@ -8,16 +8,17 @@ public interface IOperationRepository
       CreateOperationCommand command,
       CancellationToken cancellationToken = default);
 
-  Task<OperationDto?> GetByIdAsync(
+  Task<OperationDetailDto?> GetByIdAsync(
       Guid id,
       CancellationToken cancellationToken = default);
 
-  Task<IReadOnlyList<OperationDto>> GetAllAsync(
+  Task<OperationPagedResult> GetAllAsync(
       Guid? customerId,
       string? operationType,
       DateTimeOffset? startDate,
       DateTimeOffset? endDate,
       int page,
       int pageSize,
-      CancellationToken cancellationToken = default);
+      CancellationToken cancellationToken = default,
+      string? status = null);
 }

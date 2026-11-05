@@ -164,6 +164,10 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("amount");
 
+                    b.Property<Guid?>("BalanceCreditId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("balance_credit_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -178,7 +182,7 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("description");
 
-                    b.Property<Guid>("OperationId")
+                    b.Property<Guid?>("OperationId")
                         .HasColumnType("uuid")
                         .HasColumnName("operation_id");
 
@@ -188,14 +192,23 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BalanceCreditId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ledger_entries_balance_credit_type")
+                        .HasFilter("\"balance_credit_id\" IS NOT NULL");
+
                     b.HasIndex("CustomerId", "CreatedAt")
                         .HasDatabaseName("ix_ledger_entries_customer_created_at");
 
                     b.HasIndex("OperationId", "Type")
                         .IsUnique()
-                        .HasDatabaseName("ux_ledger_entries_operation_type");
+                        .HasDatabaseName("ux_ledger_entries_operation_type")
+                        .HasFilter("\"operation_id\" IS NOT NULL");
 
-                    b.ToTable("ledger_entries", (string)null);
+                    b.ToTable("ledger_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ledger_entries_exactly_one_origin", "(\r\n    \"operation_id\" IS NOT NULL\r\n    AND \"balance_credit_id\" IS NULL\r\n    AND \"type\" = 1\r\n)\r\nOR\r\n(\r\n    \"operation_id\" IS NULL\r\n    AND \"balance_credit_id\" IS NOT NULL\r\n    AND \"type\" = 2\r\n)");
+                        });
                 });
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.Operation", b =>
@@ -380,6 +393,11 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.LedgerEntry", b =>
                 {
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.BalanceCredit", null)
+                        .WithMany()
+                        .HasForeignKey("BalanceCreditId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Comven_VehicleBilling.Domain.Entities.Customer", "Customer")
                         .WithMany()
                         .HasForeignKey("CustomerId")
@@ -389,8 +407,7 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                     b.HasOne("Comven_VehicleBilling.Domain.Entities.Operation", null)
                         .WithMany()
                         .HasForeignKey("OperationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Customer");
                 });

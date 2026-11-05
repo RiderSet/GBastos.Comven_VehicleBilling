@@ -84,7 +84,9 @@ public sealed class OperationIdempotencyTests
     db.OutboxMessages.RemoveRange(outboxMessages);
 
     var ledgerEntries = await db.LedgerEntries
-        .Where(entry => operationIds.Contains(entry.OperationId))
+        .Where(entry =>
+            entry.OperationId.HasValue &&
+            operationIds.Contains(entry.OperationId.Value))
         .ToListAsync();
 
     db.LedgerEntries.RemoveRange(ledgerEntries);

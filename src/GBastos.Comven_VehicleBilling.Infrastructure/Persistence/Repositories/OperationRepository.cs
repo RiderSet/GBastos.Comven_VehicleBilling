@@ -221,7 +221,7 @@ public sealed class OperationRepository : IOperationRepository
     }
   }
 
-  public async Task<OperationDto?> GetByIdAsync(
+  public async Task<OperationDetailDto?> GetByIdAsync(
       Guid id,
       CancellationToken cancellationToken = default)
   {
@@ -231,19 +231,47 @@ public sealed class OperationRepository : IOperationRepository
             item => item.Id == id,
             cancellationToken);
 
-    return operation is null
-        ? null
-        : Map(operation);
+    if (operation is null)
+      return null;
+
+    var ledgerEntries = await _dbContext.LedgerEntries
+        .AsNoTracking()
+        .Where(entry => entry.OperationId == id)
+        .OrderBy(entry => entry.CreatedAt)
+        .ThenBy(entry => entry.Id)
+        .ToListAsync(cancellationToken);
+
+    var ledgerDtos = ledgerEntries
+        .Select(entry => new OperationLedgerEntryDto(
+            entry.Id,
+            entry.Type.ToString(),
+            entry.Amount.Amount,
+            entry.Description,
+            entry.CreatedAt))
+        .ToList();
+
+    return new OperationDetailDto(
+        operation.Id,
+        operation.CustomerId,
+        operation.Type.ToString(),
+        operation.Amount.Amount,
+        operation.Status.ToString(),
+        operation.CreatedAt,
+        operation.InvoicedAt,
+        operation.RefundedAt,
+        operation.InvoiceId,
+        ledgerDtos);
   }
 
-  public async Task<IReadOnlyList<OperationDto>> GetAllAsync(
+  public async Task<OperationPagedResult> GetAllAsync(
       Guid? customerId,
       string? operationType,
       DateTimeOffset? startDate,
       DateTimeOffset? endDate,
       int page,
       int pageSize,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      string? status = null)
   {
     var query = _dbContext.Operations
         .AsNoTracking()
@@ -272,6 +300,23 @@ public sealed class OperationRepository : IOperationRepository
           operation => operation.Type == parsedType);
     }
 
+    if (status is not null)
+    {
+      if (!Enum.TryParse<OperationStatus>(
+              status,
+              true,
+              out var parsedStatus)
+          || !Enum.IsDefined(parsedStatus))
+      {
+        throw new ArgumentException(
+            "O status da operação informado é inválido.",
+            nameof(status));
+      }
+
+      query = query.Where(
+          operation => operation.Status == parsedStatus);
+    }
+
     if (startDate.HasValue)
     {
       query = query.Where(
@@ -284,6 +329,12 @@ public sealed class OperationRepository : IOperationRepository
           operation => operation.CreatedAt <= endDate.Value);
     }
 
+    var totalCount = await query.CountAsync(cancellationToken);
+
+    var totalPages = totalCount == 0
+        ? 0
+        : (int)Math.Ceiling(totalCount / (double)pageSize);
+
     var operations = await query
         .OrderByDescending(operation => operation.CreatedAt)
         .ThenByDescending(operation => operation.Id)
@@ -291,9 +342,15 @@ public sealed class OperationRepository : IOperationRepository
         .Take(pageSize)
         .ToListAsync(cancellationToken);
 
-    return operations
+    var items = operations
         .Select(Map)
         .ToList();
+
+    return new OperationPagedResult(
+        items,
+        page,
+        pageSize,
+        totalCount);
   }
 
   private static void EnsureSameRequest(
@@ -365,9 +422,14 @@ public sealed class OperationRepository : IOperationRepository
 
   private static OperationDto Map(Operation operation)
       => new(
-          operation.Id,
-          operation.CustomerId,
-          operation.Type.ToString(),
-          operation.Amount.Amount,
-          operation.CreatedAt.UtcDateTime);
+          Id: operation.Id,
+          ExternalOperationId: operation.ExternalOperationId,
+          CustomerId: operation.CustomerId,
+          OperationType: operation.Type.ToString(),
+          Amount: operation.Amount.Amount,
+          Status: operation.Status.ToString(),
+          CreatedAt: operation.CreatedAt,
+          RefundedAt: operation.RefundedAt,
+          InvoicedAt: operation.InvoicedAt,
+          InvoiceId: operation.InvoiceId);
 }

@@ -25,18 +25,19 @@ public static class OperationEndpoints
     group.MapGet("/{id:guid}", GetOperationById)
         .WithName("GetOperationById")
         .WithSummary("Consulta uma operação pelo identificador")
-        .Produces<OperationResponse>(StatusCodes.Status200OK)
+        .WithDescription(
+            "Retorna os dados completos da operação, incluindo seus lançamentos financeiros.")
+        .Produces<OperationDetailResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
     group.MapGet("/", GetOperations)
         .WithName("GetOperations")
         .WithSummary("Lista operações com filtros e paginação")
-        .Produces<IReadOnlyList<OperationResponse>>(
-            StatusCodes.Status200OK)
+        .Produces<PagedOperationResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
-    return app;
+    return group;
   }
 
   private static async Task<IResult> CreateOperation(
@@ -106,7 +107,7 @@ public static class OperationEndpoints
 
       return operation is null
           ? Results.NotFound()
-          : Results.Ok(ToResponse(operation));
+          : Results.Ok(ToDetailResponse(operation));
     }
     catch (ArgumentException ex)
     {
@@ -122,6 +123,7 @@ public static class OperationEndpoints
       string? operationType,
       DateTimeOffset? startDate,
       DateTimeOffset? endDate,
+      string? status,
       OperationService service,
       CancellationToken cancellationToken,
       int page = DefaultPage,
@@ -129,18 +131,26 @@ public static class OperationEndpoints
   {
     try
     {
-      var operations = await service.GetAllAsync(
+      var result = await service.GetAllAsync(
           customerId,
           operationType,
           startDate,
           endDate,
           page,
           pageSize,
+          status,
           cancellationToken);
 
-      var response = operations
-          .Select(ToResponse)
-          .ToArray();
+      var response = new PagedOperationResponse(
+          result.Items
+              .Select(ToResponse)
+              .ToArray(),
+          result.Page,
+          result.PageSize,
+          result.TotalCount,
+          result.TotalPages,
+          result.HasNextPage,
+          result.HasPreviousPage);
 
       return Results.Ok(response);
     }
@@ -161,6 +171,29 @@ public static class OperationEndpoints
         operation.CustomerId,
         operation.OperationType,
         operation.Amount,
-        operation.CreatedAt);
+        operation.CreatedAt.UtcDateTime);
+  }
+
+  private static OperationDetailResponse ToDetailResponse(
+        OperationDetailDto operation)
+  {
+    return new OperationDetailResponse(
+        operation.Id,
+        operation.CustomerId,
+        operation.OperationType,
+        operation.Amount,
+        operation.Status,
+        operation.CreatedAt,
+        operation.InvoicedAt,
+        operation.RefundedAt,
+        operation.InvoiceId,
+        operation.LedgerEntries
+            .Select(entry => new OperationLedgerEntryResponse(
+                entry.Id,
+                entry.Type,
+                entry.Amount,
+                entry.Description,
+                entry.CreatedAt))
+            .ToList());
   }
 }

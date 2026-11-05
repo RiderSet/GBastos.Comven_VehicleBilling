@@ -7,7 +7,11 @@ public sealed class LedgerEntry
 {
   public Guid Id { get; private set; }
   public Guid CustomerId { get; private set; }
-  public Guid OperationId { get; private set; }
+
+  // Um lançamento tem origem em uma operação OU em um crédito.
+  public Guid? OperationId { get; private set; }
+  public Guid? BalanceCreditId { get; private set; }
+
   public Money Amount { get; private set; } = Money.Zero;
   public LedgerEntryType Type { get; private set; }
   public string Description { get; private set; } = string.Empty;
@@ -19,6 +23,7 @@ public sealed class LedgerEntry
   {
   }
 
+  // Mantém compatibilidade com o débito já implementado.
   public LedgerEntry(
       Guid id,
       Guid customerId,
@@ -28,6 +33,67 @@ public sealed class LedgerEntry
       string description,
       DateTimeOffset createdAt)
   {
+    ValidateCommon(id, customerId, amount, type, description);
+
+    if (operationId == Guid.Empty)
+      throw new ArgumentException(
+          "O ID da operação é obrigatório.", nameof(operationId));
+
+    if (type != LedgerEntryType.Debit)
+      throw new ArgumentException(
+          "Uma operação deve gerar um lançamento de débito.",
+          nameof(type));
+
+    Id = id;
+    CustomerId = customerId;
+    OperationId = operationId;
+    BalanceCreditId = null;
+    Amount = amount;
+    Type = type;
+    Description = description.Trim();
+    CreatedAt = createdAt;
+  }
+
+  // Fábrica para créditos de saldo, sem vínculo com operação veicular.
+  public static LedgerEntry CreateCredit(
+      Guid id,
+      Guid customerId,
+      Guid balanceCreditId,
+      Money amount,
+      string description,
+      DateTimeOffset createdAt)
+  {
+    ValidateCommon(
+        id,
+        customerId,
+        amount,
+        LedgerEntryType.Credit,
+        description);
+
+    if (balanceCreditId == Guid.Empty)
+      throw new ArgumentException(
+          "O ID do crédito é obrigatório.", nameof(balanceCreditId));
+
+    return new LedgerEntry
+    {
+      Id = id,
+      CustomerId = customerId,
+      OperationId = null,
+      BalanceCreditId = balanceCreditId,
+      Amount = amount,
+      Type = LedgerEntryType.Credit,
+      Description = description.Trim(),
+      CreatedAt = createdAt
+    };
+  }
+
+  private static void ValidateCommon(
+      Guid id,
+      Guid customerId,
+      Money amount,
+      LedgerEntryType type,
+      string description)
+  {
     if (id == Guid.Empty)
       throw new ArgumentException(
           "O ID do lançamento é obrigatório.", nameof(id));
@@ -36,26 +102,24 @@ public sealed class LedgerEntry
       throw new ArgumentException(
           "O ID do cliente é obrigatório.", nameof(customerId));
 
-    if (operationId == Guid.Empty)
-      throw new ArgumentException(
-          "O ID da operação é obrigatório.", nameof(operationId));
-
     ArgumentNullException.ThrowIfNull(amount);
 
-    if (amount.IsZero)
-      throw new ArgumentException(
-          "O valor do lançamento deve ser maior que zero.", nameof(amount));
+    if (amount.IsZero || amount.Amount < 0)
+      throw new ArgumentOutOfRangeException(
+          nameof(amount), "O valor deve ser maior que zero.");
+
+    if (!Enum.IsDefined(type))
+      throw new ArgumentOutOfRangeException(
+          nameof(type), "Tipo de lançamento inválido.");
 
     if (string.IsNullOrWhiteSpace(description))
       throw new ArgumentException(
-          "A descrição do lançamento é obrigatória.", nameof(description));
+          "A descrição do lançamento é obrigatória.",
+          nameof(description));
 
-    Id = id;
-    CustomerId = customerId;
-    OperationId = operationId;
-    Amount = amount;
-    Type = type;
-    Description = description.Trim();
-    CreatedAt = createdAt;
+    if (description.Trim().Length > 250)
+      throw new ArgumentException(
+          "A descrição aceita até 250 caracteres.",
+          nameof(description));
   }
 }

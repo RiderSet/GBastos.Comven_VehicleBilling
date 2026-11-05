@@ -11,7 +11,6 @@ public sealed class Customer
   public Money Balance { get; private set; } = Money.Zero;
   public DateTimeOffset CreatedAt { get; private set; }
 
-  // Construtor utilizado pelo Entity Framework Core.
   private Customer()
   {
   }
@@ -24,34 +23,28 @@ public sealed class Customer
       DateTimeOffset createdAt)
   {
     if (id == Guid.Empty)
-    {
       throw new ArgumentException(
-          "O ID do cliente é obrigatório.",
-          nameof(id));
-    }
+          "O ID do cliente é obrigatório.", nameof(id));
 
     if (string.IsNullOrWhiteSpace(name))
-    {
       throw new ArgumentException(
-          "O nome do cliente é obrigatório.",
-          nameof(name));
-    }
+          "O nome do cliente é obrigatório.", nameof(name));
 
     if (!Enum.IsDefined(plan))
-    {
       throw new ArgumentOutOfRangeException(
-          nameof(plan),
-          "Plano de cliente inválido.");
-    }
+          nameof(plan), "Plano de cliente inválido.");
 
     ArgumentNullException.ThrowIfNull(initialBalance);
 
     if (plan == CustomerPlan.Postpaid && !initialBalance.IsZero)
-    {
       throw new ArgumentException(
           "Clientes pós-pagos não podem possuir saldo pré-pago.",
           nameof(initialBalance));
-    }
+
+    if (plan == CustomerPlan.Prepaid && initialBalance.Amount < 0)
+      throw new ArgumentException(
+          "O saldo inicial não pode ser negativo.",
+          nameof(initialBalance));
 
     Id = id;
     Name = name.Trim();
@@ -65,23 +58,16 @@ public sealed class Customer
     ArgumentNullException.ThrowIfNull(amount);
 
     if (Plan != CustomerPlan.Prepaid)
-    {
       throw new InvalidOperationException(
           "Débitos de saldo só são permitidos para clientes pré-pagos.");
-    }
 
-    if (amount.IsZero)
-    {
+    if (amount.IsZero || amount.Amount < 0)
       throw new ArgumentOutOfRangeException(
-          nameof(amount),
-          "O valor do débito deve ser maior que zero.");
-    }
+          nameof(amount), "O valor do débito deve ser maior que zero.");
 
     if (amount.Amount > Balance.Amount)
-    {
       throw new InvalidOperationException(
           "Saldo insuficiente para realizar a operação.");
-    }
 
     Balance = Balance.Subtract(amount);
   }
@@ -91,17 +77,12 @@ public sealed class Customer
     ArgumentNullException.ThrowIfNull(amount);
 
     if (Plan != CustomerPlan.Prepaid)
-    {
       throw new InvalidOperationException(
           "Créditos de saldo só são permitidos para clientes pré-pagos.");
-    }
 
-    if (amount.IsZero)
-    {
+    if (amount.IsZero || amount.Amount < 0)
       throw new ArgumentOutOfRangeException(
-          nameof(amount),
-          "O valor do crédito deve ser maior que zero.");
-    }
+          nameof(amount), "O valor do crédito deve ser maior que zero.");
 
     Balance = Balance.Add(amount);
   }
