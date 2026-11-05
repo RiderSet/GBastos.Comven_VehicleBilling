@@ -1,5 +1,6 @@
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Domain.Enums;
+using FluentValidation;
 
 namespace Comven_VehicleBilling.Application.Operations;
 
@@ -8,19 +9,38 @@ public sealed class OperationService
   private const int DefaultPage = 1;
   private const int DefaultPageSize = 50;
   private const int MaxPageSize = 100;
+  private readonly IValidator<CreateOperationCommand> _validator;
 
   private readonly IOperationRepository _repository;
 
   public OperationService(IOperationRepository repository)
+      : this(repository, new CreateOperationCommandValidator())
   {
-    _repository = repository
-        ?? throw new ArgumentNullException(nameof(repository));
+  }
+
+  public OperationService(
+      IOperationRepository repository,
+      IValidator<CreateOperationCommand> validator)
+  {
+    _repository = repository;
+    _validator = validator;
   }
 
   public async Task<OperationDto> CreateAsync(
       CreateOperationCommand command,
       CancellationToken cancellationToken = default)
   {
+    var validationResult = await _validator.ValidateAsync(command);
+
+    if (!validationResult.IsValid)
+    {
+      var errors = string.Join(
+          Environment.NewLine,
+          validationResult.Errors.Select(error => error.ErrorMessage));
+
+      throw new ArgumentException(errors);
+    }
+
     ArgumentNullException.ThrowIfNull(command);
     cancellationToken.ThrowIfCancellationRequested();
 
@@ -162,3 +182,30 @@ public sealed class OperationService
   }
 }
 
+public sealed class CreateOperationCommandValidator
+    : AbstractValidator<CreateOperationCommand>
+{
+  public CreateOperationCommandValidator()
+  {
+    RuleFor(x => x.ExternalOperationId)
+        .NotEmpty()
+        .WithMessage("O identificador externo da operação é obrigatório.");
+
+    RuleFor(x => x.CustomerId)
+        .NotEmpty()
+        .WithMessage("O identificador do cliente é obrigatório.");
+
+    RuleFor(x => x.OperationType)
+        .NotEmpty()
+        .MaximumLength(50)
+        .WithMessage("O tipo da operação é obrigatório e deve ter até 50 caracteres.");
+
+    RuleFor(x => x.Amount)
+        .GreaterThan(0)
+        .WithMessage("O valor da operação deve ser maior que zero.")
+        .Must(amount => decimal.Round(amount, 2) == amount)
+        .WithMessage("O valor da operação deve ter no máximo duas casas decimais.")
+        .LessThanOrEqualTo(9999999999999999.99m)
+        .WithMessage("O valor excede o limite permitido.");
+  }
+}

@@ -510,8 +510,22 @@ internal sealed class OperationScenarios
       int page,
       int pageSize)
   {
-    if (operations.ValueKind != JsonValueKind.Array)
+    JsonElement items;
+
+    if (operations.ValueKind == JsonValueKind.Array)
+    {
+      items = operations;
+    }
+    else if (operations.ValueKind == JsonValueKind.Object &&
+             operations.TryGetProperty("items", out var resultItems) &&
+             resultItems.ValueKind == JsonValueKind.Array)
+    {
+      items = resultItems;
+    }
+    else
+    {
       return false;
+    }
 
     Console.WriteLine();
     Console.WriteLine(
@@ -519,23 +533,20 @@ internal sealed class OperationScenarios
 
     Console.WriteLine($"Página: {page}");
     Console.WriteLine($"Tamanho da página: {pageSize}");
-    Console.WriteLine(
-        $"Operações encontradas: {operations.GetArrayLength()}");
+    Console.WriteLine($"Operações encontradas: {items.GetArrayLength()}");
 
-    foreach (var operation in operations.EnumerateArray())
+    foreach (var operation in items.EnumerateArray())
     {
       var id = ReadString(operation, "id");
       var type = ReadString(operation, "operationType");
-      var operationCustomerId =
-          ReadString(operation, "customerId");
+      var operationCustomerId = ReadString(operation, "customerId");
 
       var operationAmount =
           operation.TryGetProperty("amount", out var amountElement)
               ? amountElement.ToString()
               : "N/D";
 
-      var createdAt =
-          ReadString(operation, "createdAt");
+      var createdAt = ReadString(operation, "createdAt");
 
       Console.WriteLine();
       Console.WriteLine("----------------------------------------");
