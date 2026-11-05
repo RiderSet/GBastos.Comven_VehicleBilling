@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Api.Endpoints;
+﻿using Comven_VehicleBilling.Api.Endpoints;
 using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
@@ -101,7 +101,7 @@ app.MapGet(
         {
             return Results.Problem(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Banco de dados indisponÃ­vel");
+                title: "Banco de dados indisponÃƒÂ­vel");
         }
 
         return Results.Ok(new
@@ -116,6 +116,8 @@ app.MapGet(
 
 app.MapCustomerEndpoints();
 app.MapOperationEndpoints();
+app.MapInvoiceEndpoints();
 app.MapStatementEndpoints();
 
 app.Run();
+

@@ -2,7 +2,6 @@
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
-using Comven_VehicleBilling.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
@@ -13,7 +12,8 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
     public InvoiceRepository(VehicleBillingDbContext dbContext)
     {
-        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _dbContext = dbContext
+            ?? throw new ArgumentNullException(nameof(dbContext));
     }
 
     public async Task<InvoiceDto> CreateAsync(
@@ -23,7 +23,10 @@ public sealed class InvoiceRepository : IInvoiceRepository
         ArgumentNullException.ThrowIfNull(command);
 
         var periodStart = new DateOnly(
-            command.ReferenceDate.Year, command.ReferenceDate.Month, 1);
+            command.ReferenceDate.Year,
+            command.ReferenceDate.Month,
+            1);
+
         var periodEnd = periodStart.AddMonths(1);
 
         var customer = await _dbContext.Customers
@@ -32,7 +35,8 @@ public sealed class InvoiceRepository : IInvoiceRepository
                 cancellationToken);
 
         if (customer is null)
-            throw new InvalidOperationException("O cliente informado não foi encontrado.");
+            throw new InvalidOperationException(
+                "O cliente informado não foi encontrado.");
 
         if (customer.Plan != CustomerPlan.Postpaid)
             throw new InvalidOperationException(
@@ -50,54 +54,63 @@ public sealed class InvoiceRepository : IInvoiceRepository
             return Map(existing);
 
         await using var transaction =
-            await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        var operations = await _dbContext.Operations
-            .Where(o =>
-                o.CustomerId == command.CustomerId &&
-                o.Status == OperationStatus.AwaitingInvoice &&
-                o.CreatedAt >= new DateTimeOffset(
-                    periodStart.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) &&
-                o.CreatedAt < new DateTimeOffset(
-                    periodEnd.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero))
-            .OrderBy(o => o.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        var invoice = new Invoice(
-            Guid.NewGuid(),
-            command.CustomerId,
-            periodStart,
-            periodEnd,
-            DateTimeOffset.UtcNow);
-
-        foreach (var operation in operations)
-        {
-            var item = new InvoiceItem(
-                invoice.Id,
-                operation.Id,
-                operation.Amount);
-
-            invoice.AddItem(item);
-            operation.MarkInvoiced(invoice.Id, DateTimeOffset.UtcNow);
-        }
-
-        if (operations.Count > 0)
-            invoice.FinalizeInvoice();
-
-        await _dbContext.Invoices.AddAsync(invoice, cancellationToken);
+            await _dbContext.Database.BeginTransactionAsync(
+                cancellationToken);
 
         try
         {
+            var operations = await _dbContext.Operations
+                .Where(o =>
+                    o.CustomerId == command.CustomerId &&
+                    o.Status == OperationStatus.AwaitingInvoice &&
+                    o.CreatedAt >= new DateTimeOffset(
+                        periodStart.ToDateTime(TimeOnly.MinValue),
+                        TimeSpan.Zero) &&
+                    o.CreatedAt < new DateTimeOffset(
+                        periodEnd.ToDateTime(TimeOnly.MinValue),
+                        TimeSpan.Zero))
+                .OrderBy(o => o.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            var invoice = new Invoice(
+                Guid.NewGuid(),
+                command.CustomerId,
+                periodStart,
+                periodEnd,
+                DateTimeOffset.UtcNow);
+
+            foreach (var operation in operations)
+            {
+                var item = new InvoiceItem(
+                    invoice.Id,
+                    operation.Id,
+                    operation.Amount);
+
+                invoice.AddItem(item);
+
+                operation.MarkInvoiced(
+                    invoice.Id,
+                    DateTimeOffset.UtcNow);
+            }
+
+            if (operations.Count > 0)
+                invoice.FinalizeInvoice();
+
+            await _dbContext.Invoices.AddAsync(
+                invoice,
+                cancellationToken);
+
             await _dbContext.SaveChangesAsync(cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
+
+            return Map(invoice);
         }
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
-
-        return Map(invoice);
     }
 
     public async Task<InvoiceDto?> GetByIdAsync(
@@ -106,7 +119,9 @@ public sealed class InvoiceRepository : IInvoiceRepository
     {
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(
+                i => i.Id == id,
+                cancellationToken);
 
         return invoice is null ? null : Map(invoice);
     }
@@ -120,7 +135,8 @@ public sealed class InvoiceRepository : IInvoiceRepository
             .AsQueryable();
 
         if (customerId.HasValue)
-            query = query.Where(i => i.CustomerId == customerId.Value);
+            query = query.Where(
+                i => i.CustomerId == customerId.Value);
 
         var invoices = await query
             .OrderByDescending(i => i.CreatedAt)

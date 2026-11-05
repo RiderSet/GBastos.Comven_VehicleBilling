@@ -341,4 +341,85 @@ public sealed class OperationIdempotencyTests
     }
   }
 
+  [Fact]
+  public async Task Concurrent_same_external_id_for_different_customers_must_be_rejected()
+  {
+    const decimal operationAmount = 70.01m;
+
+    var customerA = await CreateCustomerAsync();
+    var customerB = await CreateCustomerAsync();
+    var externalId = Guid.NewGuid();
+
+    try
+    {
+      var start = new TaskCompletionSource<bool>(
+          TaskCreationOptions.RunContinuationsAsynchronously);
+
+      async Task<OperationDto?> TryCreateAsync(Guid customerId)
+      {
+        await start.Task;
+
+        await using var db = CreateDbContext();
+
+        try
+        {
+          return await new OperationRepository(db).CreateAsync(
+              NewCommand(externalId, customerId, operationAmount));
+        }
+        catch (InvalidOperationException)
+        {
+          return null;
+        }
+      }
+
+      var taskA = TryCreateAsync(customerA);
+      var taskB = TryCreateAsync(customerB);
+
+      start.SetResult(true);
+
+      var results = await Task.WhenAll(taskA, taskB);
+
+      var successfulOperation = Assert.Single(
+          results.Where(result => result is not null));
+
+      Assert.Equal(externalId, successfulOperation.ExternalOperationId);
+
+      await using var verifyDb = CreateDbContext();
+
+      var operations = await verifyDb.Operations
+          .Where(x => x.ExternalOperationId == externalId)
+          .ToListAsync();
+
+      var operation = Assert.Single(operations);
+
+      Assert.Equal(successfulOperation.Id, operation.Id);
+
+      var ledgerEntries = await verifyDb.LedgerEntries
+          .Where(x => x.OperationId == operation.Id)
+          .ToListAsync();
+
+      Assert.Single(ledgerEntries);
+
+      var winningCustomer = await verifyDb.Customers
+          .AsNoTracking()
+          .SingleAsync(x => x.Id == operation.CustomerId);
+
+      var losingCustomerId = operation.CustomerId == customerA
+          ? customerB
+          : customerA;
+
+      var losingCustomer = await verifyDb.Customers
+          .AsNoTracking()
+          .SingleAsync(x => x.Id == losingCustomerId);
+
+      Assert.Equal(50.00m, winningCustomer.Balance.Amount);
+      Assert.Equal(120.01m, losingCustomer.Balance.Amount);
+    }
+    finally
+    {
+      await CleanupAsync(externalId, customerA);
+      await CleanupAsync(externalId, customerB);
+    }
+  }
+
 }

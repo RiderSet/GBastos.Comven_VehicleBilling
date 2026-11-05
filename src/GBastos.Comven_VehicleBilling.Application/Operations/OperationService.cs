@@ -9,8 +9,8 @@ public sealed class OperationService
   private const int DefaultPage = 1;
   private const int DefaultPageSize = 50;
   private const int MaxPageSize = 100;
-  private readonly IValidator<CreateOperationCommand> _validator;
 
+  private readonly IValidator<CreateOperationCommand> _validator;
   private readonly IOperationRepository _repository;
 
   public OperationService(IOperationRepository repository)
@@ -22,15 +22,24 @@ public sealed class OperationService
       IOperationRepository repository,
       IValidator<CreateOperationCommand> validator)
   {
-    _repository = repository;
-    _validator = validator;
+    _repository = repository
+        ?? throw new ArgumentNullException(nameof(repository));
+
+    _validator = validator
+        ?? throw new ArgumentNullException(nameof(validator));
   }
 
   public async Task<OperationDto> CreateAsync(
       CreateOperationCommand command,
       CancellationToken cancellationToken = default)
   {
-    var validationResult = await _validator.ValidateAsync(command);
+    ArgumentNullException.ThrowIfNull(command);
+
+    cancellationToken.ThrowIfCancellationRequested();
+
+    var validationResult = await _validator.ValidateAsync(
+        command,
+        cancellationToken);
 
     if (!validationResult.IsValid)
     {
@@ -38,38 +47,7 @@ public sealed class OperationService
           Environment.NewLine,
           validationResult.Errors.Select(error => error.ErrorMessage));
 
-      throw new ArgumentException(errors);
-    }
-
-    ArgumentNullException.ThrowIfNull(command);
-    cancellationToken.ThrowIfCancellationRequested();
-
-    if (command.ExternalOperationId == Guid.Empty)
-    {
-      throw new ArgumentException(
-          "O identificador externo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
-          nameof(command));
-    }
-
-    if (command.CustomerId == Guid.Empty)
-    {
-      throw new ArgumentException(
-          "O identificador do cliente Ã© obrigatÃ³rio.",
-          nameof(command));
-    }
-
-    if (string.IsNullOrWhiteSpace(command.OperationType))
-    {
-      throw new ArgumentException(
-          "O tipo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
-          nameof(command));
-    }
-
-    if (command.Amount <= 0)
-    {
-      throw new ArgumentOutOfRangeException(
-          nameof(command),
-          "O valor deve ser maior que zero.");
+      throw new ArgumentException(errors, nameof(command));
     }
 
     return await _repository.CreateAsync(
@@ -86,7 +64,7 @@ public sealed class OperationService
     if (id == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
+          "O identificador da operação é obrigatório.",
           nameof(id));
     }
 
@@ -110,7 +88,7 @@ public sealed class OperationService
     if (customerId.HasValue && customerId.Value == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador do cliente Ã© invÃ¡lido.",
+          "O identificador do cliente é inválido.",
           nameof(customerId));
     }
 
@@ -118,7 +96,37 @@ public sealed class OperationService
     {
       throw new ArgumentOutOfRangeException(
           nameof(page),
-          "A pÃ¡gina deve ser maior que zero.");
+          "A página deve ser maior que zero.");
+    }
+
+    if (pageSize < 1 || pageSize > MaxPageSize)
+    {
+      throw new ArgumentOutOfRangeException(
+          nameof(pageSize),
+          $"O tamanho da página deve estar entre 1 e {MaxPageSize}.");
+    }
+
+    if (page > int.MaxValue / pageSize)
+    {
+      throw new ArgumentOutOfRangeException(
+          nameof(page),
+          "O número da página é muito grande.");
+    }
+
+    if (startDate.HasValue
+        && endDate.HasValue
+        && startDate.Value > endDate.Value)
+    {
+      throw new ArgumentException(
+          "A data inicial não pode ser posterior à data final.");
+    }
+
+    if (operationType is not null
+        && string.IsNullOrWhiteSpace(operationType))
+    {
+      throw new ArgumentException(
+          "O tipo da operação informado é inválido.",
+          nameof(operationType));
     }
 
     if (status is not null)
@@ -136,36 +144,6 @@ public sealed class OperationService
       }
 
       status = parsedStatus.ToString();
-    }
-
-    if (pageSize < 1 || pageSize > MaxPageSize)
-    {
-      throw new ArgumentOutOfRangeException(
-          nameof(pageSize),
-          $"O tamanho da pÃ¡gina deve estar entre 1 e {MaxPageSize}.");
-    }
-
-    if (page > int.MaxValue / pageSize)
-    {
-      throw new ArgumentOutOfRangeException(
-          nameof(page),
-          "O nÃºmero da pÃ¡gina Ã© muito grande.");
-    }
-
-    if (startDate.HasValue
-        && endDate.HasValue
-        && startDate.Value > endDate.Value)
-    {
-      throw new ArgumentException(
-          "A data inicial nÃ£o pode ser posterior Ã  data final.");
-    }
-
-    if (operationType is not null
-        && string.IsNullOrWhiteSpace(operationType))
-    {
-      throw new ArgumentException(
-          "O tipo da operaÃ§Ã£o informado Ã© invÃ¡lido.",
-          nameof(operationType));
     }
 
     operationType = operationType?.Trim();
@@ -189,23 +167,31 @@ public sealed class CreateOperationCommandValidator
   {
     RuleFor(x => x.ExternalOperationId)
         .NotEmpty()
-        .WithMessage("O identificador externo da operação é obrigatório.");
+        .WithMessage(
+            "O identificador externo da operação é obrigatório.");
 
     RuleFor(x => x.CustomerId)
         .NotEmpty()
-        .WithMessage("O identificador do cliente é obrigatório.");
+        .WithMessage(
+            "O identificador do cliente é obrigatório.");
 
     RuleFor(x => x.OperationType)
         .NotEmpty()
+        .WithMessage(
+            "O tipo da operação é obrigatório.")
         .MaximumLength(50)
-        .WithMessage("O tipo da operação é obrigatório e deve ter até 50 caracteres.");
+        .WithMessage(
+            "O tipo da operação deve ter até 50 caracteres.");
 
     RuleFor(x => x.Amount)
         .GreaterThan(0)
-        .WithMessage("O valor da operação deve ser maior que zero.")
+        .WithMessage(
+            "O valor da operação deve ser maior que zero.")
         .Must(amount => decimal.Round(amount, 2) == amount)
-        .WithMessage("O valor da operação deve ter no máximo duas casas decimais.")
+        .WithMessage(
+            "O valor da operação deve ter no máximo duas casas decimais.")
         .LessThanOrEqualTo(9999999999999999.99m)
-        .WithMessage("O valor excede o limite permitido.");
+        .WithMessage(
+            "O valor excede o limite permitido.");
   }
 }

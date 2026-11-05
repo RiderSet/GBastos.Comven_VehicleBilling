@@ -175,7 +175,7 @@ public static class OperationEndpoints
   }
 
   private static OperationDetailResponse ToDetailResponse(
-        OperationDetailDto operation)
+      OperationDetailDto operation)
   {
     return new OperationDetailResponse(
         operation.Id,

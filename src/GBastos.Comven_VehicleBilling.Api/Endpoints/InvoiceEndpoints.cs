@@ -1,65 +1,123 @@
-using Comven_VehicleBilling.Api.Contracts.Invoices;
+﻿using Comven_VehicleBilling.Api.Contracts.Invoices;
+using Comven_VehicleBilling.Application.Invoices;
 
 namespace Comven_VehicleBilling.Api.Endpoints;
 
 public static class InvoiceEndpoints
 {
-  public static IEndpointRouteBuilder MapInvoiceEndpoints(
-      this IEndpointRouteBuilder app)
-  {
-    var group = app.MapGroup("/api/invoices")
-        .WithTags("Invoices");
+    public static IEndpointRouteBuilder MapInvoiceEndpoints(
+        this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/invoices")
+            .WithTags("Invoices");
 
-    group.MapPost("/", CreateInvoice)
-        .WithName("CreateInvoice")
-        .WithSummary("Solicita a criação de uma fatura")
-        .Produces<InvoiceResponse>(
-            StatusCodes.Status201Created)
-        .ProducesProblem(
-            StatusCodes.Status501NotImplemented);
+        group.MapPost("/", CreateInvoice)
+            .WithName("CreateInvoice")
+            .WithSummary("Gera uma fatura para um cliente pós-pago")
+            .Produces<InvoiceResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
-    group.MapGet("/{id:guid}", GetInvoiceById)
-        .WithName("GetInvoiceById")
-        .WithSummary("Consulta uma fatura pelo identificador")
-        .Produces<InvoiceResponse>(
-            StatusCodes.Status200OK)
-        .ProducesProblem(
-            StatusCodes.Status501NotImplemented);
+        group.MapGet("/{id:guid}", GetInvoiceById)
+            .WithName("GetInvoiceById")
+            .WithSummary("Consulta uma fatura pelo identificador")
+            .Produces<InvoiceResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
-    group.MapGet("/", GetInvoices)
-        .WithName("GetInvoices")
-        .WithSummary("Lista as faturas")
-        .ProducesProblem(
-            StatusCodes.Status501NotImplemented);
+        group.MapGet("/", GetInvoices)
+            .WithName("GetInvoices")
+            .WithSummary("Lista as faturas, opcionalmente filtradas por cliente")
+            .Produces<IReadOnlyList<InvoiceResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
-    return app;
-  }
+        return app;
+    }
 
-  private static IResult CreateInvoice(
-      CreateInvoiceRequest request)
-  {
-    // TODO: chamar o caso de uso da Application.
-    return Results.Problem(
-        title: "Caso de uso não implementado",
-        detail: "Conecte este endpoint ao serviço de criação de faturas.",
-        statusCode: StatusCodes.Status501NotImplemented);
-  }
+    private static async Task<IResult> CreateInvoice(
+        CreateInvoiceRequest request,
+        InvoiceService service,
+        CancellationToken cancellationToken)
+    {
+        if (request.CustomerId == Guid.Empty)
+        {
+            return Results.Problem(
+                title: "Cliente inválido",
+                detail: "Informe um identificador válido.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
 
-  private static IResult GetInvoiceById(Guid id)
-  {
-    // TODO: consultar a Application.
-    return Results.Problem(
-        title: "Caso de uso não implementado",
-        detail: "Conecte este endpoint ao serviço de consulta de faturas.",
-        statusCode: StatusCodes.Status501NotImplemented);
-  }
+        if (request.ReferenceDate == DateOnly.MinValue)
+        {
+            return Results.Problem(
+                title: "Data de referência inválida",
+                detail: "Informe uma data de referência válida.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
 
-  private static IResult GetInvoices()
-  {
-    // TODO: implementar listagem e paginação na Application.
-    return Results.Problem(
-        title: "Caso de uso não implementado",
-        detail: "Conecte este endpoint ao serviço de listagem de faturas.",
-        statusCode: StatusCodes.Status501NotImplemented);
-  }
+        try
+        {
+            var invoice = await service.CreateAsync(
+                new CreateInvoiceCommand(
+                    request.CustomerId,
+                    request.ReferenceDate),
+                cancellationToken);
+
+            var response = ToResponse(invoice);
+
+            return Results.Created(
+                $"/api/invoices/{invoice.Id}",
+                response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.Problem(
+                title: "Não foi possível gerar a fatura",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    private static async Task<IResult> GetInvoiceById(
+        Guid id,
+        InvoiceService service,
+        CancellationToken cancellationToken)
+    {
+        var invoice = await service.GetByIdAsync(
+            id, cancellationToken);
+
+        return invoice is null
+            ? Results.NotFound(new
+            {
+                message = "Fatura não encontrada.",
+                invoiceId = id
+            })
+            : Results.Ok(ToResponse(invoice));
+    }
+
+    private static async Task<IResult> GetInvoices(
+        Guid? customerId,
+        InvoiceService service,
+        CancellationToken cancellationToken)
+    {
+        if (customerId == Guid.Empty)
+        {
+            return Results.Problem(
+                title: "Cliente inválido",
+                detail: "O identificador do cliente não pode ser vazio.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var invoices = await service.GetAllAsync(
+            customerId, cancellationToken);
+
+        return Results.Ok(invoices.Select(ToResponse).ToList());
+    }
+
+    private static InvoiceResponse ToResponse(InvoiceDto invoice)
+        => new(
+            invoice.Id,
+            invoice.CustomerId,
+            invoice.ReferenceDate,
+            invoice.Amount,
+            invoice.Status,
+            invoice.CreatedAt);
 }
