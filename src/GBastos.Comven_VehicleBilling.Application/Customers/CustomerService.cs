@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 namespace Comven_VehicleBilling.Application.Customers;
 
@@ -51,4 +51,19 @@ public sealed class CustomerService
     {
         return _repository.GetAllAsync(cancellationToken);
     }
+
+  public async Task<CustomerBalanceDto?> GetBalanceAsync(
+      Guid customerId,
+      CancellationToken cancellationToken = default)
+  {
+    if (customerId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é inválido.",
+          nameof(customerId));
+
+    return await _repository.GetBalanceAsync(
+        customerId,
+        cancellationToken);
+  }
+
 }

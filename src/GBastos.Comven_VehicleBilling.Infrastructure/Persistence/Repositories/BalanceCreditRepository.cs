@@ -126,9 +126,11 @@ public sealed class BalanceCreditRepository : IBalanceCreditRepository
     catch (DbUpdateException exception)
         when (IsExternalReferenceUniqueViolation(exception))
     {
-      // Outra requisição pode ter confirmado a mesma referência.
+      // A transação anterior já foi descartada ao sair do try.
+      // Limpa o estado que falhou no EF Core.
       _dbContext.ChangeTracker.Clear();
 
+      // Recupera o crédito confirmado pela outra requisição.
       var existing = await _dbContext.BalanceCredits
           .AsNoTracking()
           .SingleOrDefaultAsync(
@@ -140,6 +142,7 @@ public sealed class BalanceCreditRepository : IBalanceCreditRepository
 
       EnsureSameCredit(existing, customerId, amount);
 
+      // Recupera o saldo atualizado do cliente.
       var currentBalance = await _dbContext.Customers
           .AsNoTracking()
           .Where(customer => customer.Id == customerId)

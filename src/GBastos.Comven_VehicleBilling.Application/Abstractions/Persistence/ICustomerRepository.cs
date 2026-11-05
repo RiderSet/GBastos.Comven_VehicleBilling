@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Application.Customers;
+using Comven_VehicleBilling.Application.Customers;
 
 namespace Comven_VehicleBilling.Application.Abstractions.Persistence;
 
@@ -14,4 +14,8 @@ public interface ICustomerRepository
 
     Task<IReadOnlyList<CustomerDto>> GetAllAsync(
         CancellationToken cancellationToken = default);
+
+  Task<CustomerBalanceDto?> GetBalanceAsync(
+      Guid customerId,
+      CancellationToken cancellationToken = default);
 }

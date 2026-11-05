@@ -12,7 +12,40 @@ public static class CustomerEndpoints
         var group = app.MapGroup("/api/customers")
             .WithTags("Customers");
 
-        group.MapPost("/", async (
+    group.MapGet("/{customerId:guid}/balance",
+        async Task<IResult> (
+            Guid customerId,
+            CustomerService service,
+            CancellationToken cancellationToken) =>
+        {
+          try
+          {
+            var balance = await service.GetBalanceAsync(
+            customerId,
+            cancellationToken);
+
+            return balance is null
+            ? Results.NotFound(new
+                    {
+                      error = "Cliente não encontrado."
+                    })
+            : Results.Ok(balance);
+          }
+          catch (ArgumentException exception)
+          {
+            return Results.BadRequest(new
+            {
+              error = exception.Message
+            });
+          }
+        })
+        .WithName("GetCustomerBalance")
+        .WithSummary("Consulta o saldo do cliente")
+        .Produces<CustomerBalanceDto>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
+    group.MapPost("/", async (
             CreateCustomerRequest request,
             CustomerService service,
             CancellationToken cancellationToken) =>

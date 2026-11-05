@@ -76,4 +76,26 @@ public sealed class CustomerRepository : ICustomerRepository
                 string.Empty))
             .ToList();
     }
+  public async Task<CustomerBalanceDto?> GetBalanceAsync(
+      Guid customerId,
+      CancellationToken cancellationToken = default)
+  {
+    var customer = await _dbContext.Customers
+        .AsNoTracking()
+        .Where(item => item.Id == customerId)
+        .Select(item => new
+        {
+          item.Id,
+          Balance = item.Balance.Amount
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (customer is null)
+      return null;
+
+    return new CustomerBalanceDto(
+        customer.Id,
+        customer.Balance,
+        "BRL");
+  }
 }
