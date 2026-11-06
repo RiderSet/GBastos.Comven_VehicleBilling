@@ -1,4 +1,4 @@
-namespace Comven_VehicleBilling.Application.Statements;
+﻿namespace Comven_VehicleBilling.Application.Statements;
 
 public sealed record GetStatementQuery(
     Guid CustomerId,

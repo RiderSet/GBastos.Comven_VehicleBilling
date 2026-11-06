@@ -72,16 +72,16 @@ public sealed class OperationService
             cancellationToken);
     }
 
-    public Task<OperationPagedResult> GetAllAsync(
-        Guid? customerId = null,
-        string? operationType = null,
-        DateTimeOffset? startDate = null,
-        DateTimeOffset? endDate = null,
-        int page = DefaultPage,
-        int pageSize = DefaultPageSize,
-        string? status = null,
-        CancellationToken cancellationToken = default)
-    {
+  public Task<OperationPagedResult> GetAllAsync(
+      Guid? customerId = null,
+      string? operationType = null,
+      DateTimeOffset? startDate = null,
+      DateTimeOffset? endDate = null,
+      int page = DefaultPage,
+      int pageSize = DefaultPageSize,
+      string? status = null,
+      CancellationToken cancellationToken = default)
+  {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (customerId.HasValue && customerId.Value == Guid.Empty)

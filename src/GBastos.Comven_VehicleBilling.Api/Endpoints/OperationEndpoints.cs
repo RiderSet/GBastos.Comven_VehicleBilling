@@ -20,7 +20,8 @@ public static class OperationEndpoints
             .Produces<OperationResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapGet("/{id:guid}", GetOperationById)
             .WithName("GetOperationById")
@@ -77,22 +78,34 @@ public static class OperationEndpoints
                 title: "Falha de validação",
                 detail: ex.Message);
         }
-        catch (InvalidOperationException ex)
-        {
-            var customerNotFound = ex.Message.Contains(
-                "cliente informado não foi encontrado",
-                StringComparison.OrdinalIgnoreCase);
+    catch (InvalidOperationException ex)
+    {
+      var customerNotFound = ex.Message.Contains(
+          "cliente informado não foi encontrado",
+          StringComparison.OrdinalIgnoreCase);
 
-            return Results.Problem(
-                statusCode: customerNotFound
-                    ? StatusCodes.Status404NotFound
-                    : StatusCodes.Status409Conflict,
-                title: customerNotFound
-                    ? "Cliente não encontrado"
-                    : "Não foi possível registrar a operação",
-                detail: ex.Message);
-        }
+      var insufficientBalance = ex.Message.Contains(
+          "Saldo insuficiente",
+          StringComparison.OrdinalIgnoreCase);
+
+      var statusCode = customerNotFound
+          ? StatusCodes.Status404NotFound
+          : insufficientBalance
+              ? StatusCodes.Status422UnprocessableEntity
+              : StatusCodes.Status409Conflict;
+
+      var title = customerNotFound
+          ? "Cliente não encontrado"
+          : insufficientBalance
+              ? "Saldo insuficiente"
+              : "Não foi possível registrar a operação";
+
+      return Results.Problem(
+          statusCode: statusCode,
+          title: title,
+          detail: ex.Message);
     }
+  }
 
     private static async Task<IResult> GetOperationById(
         Guid id,
@@ -118,52 +131,52 @@ public static class OperationEndpoints
         }
     }
 
-    private static async Task<IResult> GetOperations(
-        Guid? customerId,
-        string? operationType,
-        DateTimeOffset? startDate,
-        DateTimeOffset? endDate,
-        string? status,
-        OperationService service,
-        CancellationToken cancellationToken,
-        int page = DefaultPage,
-        int pageSize = DefaultPageSize)
+  private static async Task<IResult> GetOperations(
+      Guid? customerId,
+      string? operationType,
+      DateTimeOffset? startDate,
+      DateTimeOffset? endDate,
+      string? status,
+      OperationService service,
+      CancellationToken cancellationToken,
+      int page = DefaultPage,
+      int pageSize = DefaultPageSize)
+  {
+    try
     {
-        try
-        {
-            var result = await service.GetAllAsync(
-                customerId,
-                operationType,
-                startDate,
-                endDate,
-                page,
-                pageSize,
-                status,
-                cancellationToken);
+      var result = await service.GetAllAsync(
+          customerId,
+          operationType,
+          startDate,
+          endDate,
+          page,
+          pageSize,
+          status,
+          cancellationToken);
 
-            var response = new PagedOperationResponse(
-                result.Items
-                    .Select(ToResponse)
-                    .ToArray(),
-                result.Page,
-                result.PageSize,
-                result.TotalCount,
-                result.TotalPages,
-                result.HasNextPage,
-                result.HasPreviousPage);
+      var response = new PagedOperationResponse(
+          result.Items
+              .Select(ToResponse)
+              .ToArray(),
+          result.Page,
+          result.PageSize,
+          result.TotalCount,
+          result.TotalPages,
+          result.HasNextPage,
+          result.HasPreviousPage);
 
-            return Results.Ok(response);
-        }
-        catch (ArgumentException ex)
-        {
-            return Results.Problem(
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Filtro ou paginação inválida",
-                detail: ex.Message);
-        }
+      return Results.Ok(response);
     }
+    catch (ArgumentException ex)
+    {
+      return Results.Problem(
+          statusCode: StatusCodes.Status400BadRequest,
+          title: "Filtro ou paginação inválida",
+          detail: ex.Message);
+    }
+  }
 
-    private static OperationResponse ToResponse(
+  private static OperationResponse ToResponse(
         OperationDto operation)
     {
         return new OperationResponse(

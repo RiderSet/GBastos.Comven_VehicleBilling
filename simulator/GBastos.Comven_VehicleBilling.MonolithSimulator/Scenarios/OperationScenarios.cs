@@ -25,7 +25,7 @@ internal static class OperationScenarios
     Console.WriteLine("======================================");
 
     // 1. Criar cliente
-    Console.WriteLine("\n[1/5] Criando cliente...");
+    Console.WriteLine("\n[1/6] Criando cliente...");
 
     var customerResponse = await client.CreateCustomerAsync(
         "Cliente Simulador",
@@ -51,7 +51,7 @@ internal static class OperationScenarios
     Console.WriteLine($"Cliente criado: {customerId}");
 
     // 2. Creditar saldo
-    Console.WriteLine("\n[2/5] Creditando saldo...");
+    Console.WriteLine("\n[2/6] Creditando saldo...");
 
     var creditReference = Guid.NewGuid().ToString("N");
 
@@ -65,8 +65,8 @@ internal static class OperationScenarios
 
     Console.WriteLine("Crédito de R$ 1.000,00 realizado.");
 
-    // 3. Criar operação
-    Console.WriteLine("\n[3/5] Registrando operação...");
+    // 3. Registrar operação
+    Console.WriteLine("\n[3/6] Registrando operação...");
 
     var externalOperationId = Guid.NewGuid();
 
@@ -100,8 +100,15 @@ internal static class OperationScenarios
     Console.WriteLine($"Tipo: {operation.OperationType}");
     Console.WriteLine($"Valor: R$ {operation.Amount:N2}");
 
-    // 4. Reenviar a mesma operação para testar idempotência
-    Console.WriteLine("\n[4/5] Testando idempotência...");
+    if (operation.CustomerId != customerId ||
+        operation.Amount != 25.00m)
+    {
+      throw new InvalidOperationException(
+          "Os dados retornados da operação não correspondem à solicitação.");
+    }
+
+    // 4. Testar idempotência
+    Console.WriteLine("\n[4/6] Testando idempotência...");
 
     var retryResponse = await client.CreateOperationAsync(
         request,
@@ -127,7 +134,7 @@ internal static class OperationScenarios
         "Idempotência confirmada: o reenvio retornou a mesma operação.");
 
     // 5. Consultar operações do cliente
-    Console.WriteLine("\n[5/5] Consultando operações...");
+    Console.WriteLine("\n[5/6] Consultando operações...");
 
     var listResponse = await client.GetOperationsAsync(
         customerId,
@@ -144,6 +151,121 @@ internal static class OperationScenarios
 
     Console.WriteLine("Consulta realizada com sucesso.");
     Console.WriteLine($"Resposta da API: {listJson}");
+
+    // 6. Conciliar saldo e lançamentos do razão
+    Console.WriteLine("\n[6/6] Validando saldo e razão...");
+
+    var today = DateOnly.FromDateTime(DateTime.Now);
+
+    var statementResponse = await client.GetStatementAsync(
+        customerId,
+        today,
+        today,
+        cancellationToken);
+
+    await EnsureSuccessAsync(
+        statementResponse,
+        "Consulta do extrato financeiro");
+
+    var statementJson = await statementResponse.Content.ReadAsStringAsync(
+        cancellationToken);
+
+    using var statementDocument = JsonDocument.Parse(statementJson);
+
+    var statement = statementDocument.RootElement;
+
+    var totalCredits = statement.GetProperty("totalCredits").GetDecimal();
+    var totalDebits = statement.GetProperty("totalDebits").GetDecimal();
+    var balance = statement.GetProperty("balance").GetDecimal();
+
+    Console.WriteLine($"Total de créditos: R$ {totalCredits:N2}");
+    Console.WriteLine($"Total de débitos: R$ {totalDebits:N2}");
+    Console.WriteLine($"Saldo final: R$ {balance:N2}");
+
+    if (totalCredits != 1000.00m ||
+        totalDebits != 25.00m ||
+        balance != 975.00m)
+    {
+      throw new InvalidOperationException(
+          "Falha na conciliação financeira. " +
+          $"Créditos: {totalCredits:N2}; " +
+          $"Débitos: {totalDebits:N2}; " +
+          $"Saldo: {balance:N2}.");
+    }
+
+    // Consultar os lançamentos do razão
+    var entriesResponse = await client.GetStatementEntriesAsync(
+        customerId,
+        1,
+        50,
+        cancellationToken);
+
+    await EnsureSuccessAsync(
+        entriesResponse,
+        "Consulta dos lançamentos do razão");
+
+    var entriesJson = await entriesResponse.Content.ReadAsStringAsync(
+        cancellationToken);
+
+    using var entriesDocument = JsonDocument.Parse(entriesJson);
+
+    var items = entriesDocument.RootElement.GetProperty("items");
+
+    var operationEntryCount = 0;
+
+    foreach (var entry in items.EnumerateArray())
+    {
+      if (!entry.TryGetProperty("operationId", out var entryOperationId))
+        continue;
+
+      if (entryOperationId.ValueKind != JsonValueKind.String)
+        continue;
+
+      if (!Guid.TryParse(
+              entryOperationId.GetString(),
+              out var parsedOperationId))
+        continue;
+
+      if (parsedOperationId != operation.Id)
+        continue;
+
+      operationEntryCount++;
+
+      var amount = entry.GetProperty("amount").GetDecimal();
+
+      var type = entry.GetProperty("type").GetString();
+
+      if (amount != 25.00m)
+      {
+        throw new InvalidOperationException(
+            $"Valor incorreto no razão: {amount:N2}.");
+      }
+
+      // Confirmar o valor textual do tipo após validar
+      // a representação utilizada pelo StatementRepository.
+      if (!string.Equals(
+              type,
+              "Debit",
+              StringComparison.OrdinalIgnoreCase))
+      {
+        throw new InvalidOperationException(
+            $"Tipo de lançamento incorreto: {type}.");
+      }
+    }
+
+    if (operationEntryCount != 1)
+    {
+      throw new InvalidOperationException(
+          "O razão deveria possuir exatamente um lançamento " +
+          $"para a operação {operation.Id}, mas foram encontrados " +
+          $"{operationEntryCount}.");
+    }
+
+    Console.WriteLine(
+        "Conciliação financeira confirmada.");
+
+    Console.WriteLine(
+        "Lançamento único de R$ 25,00 encontrado no razão.");
 
     Console.WriteLine("\n======================================");
     Console.WriteLine(" CENÁRIO CONCLUÍDO COM SUCESSO");

@@ -423,4 +423,56 @@ public sealed class OperationIdempotencyTests
     }
   }
 
+  [Fact]
+  public async Task Insufficient_balance_must_not_create_operation_or_debit_ledger()
+  {
+    const decimal initialBalance = 120.01m;
+    const decimal operationAmount = 150.00m;
+
+    var customerId = await CreateCustomerAsync();
+    var externalId = Guid.NewGuid();
+
+    try
+    {
+      await using (var db = CreateDbContext())
+      {
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new OperationRepository(db).CreateAsync(
+                NewCommand(externalId, customerId, operationAmount)));
+      }
+
+      await using var verifyDb = CreateDbContext();
+
+      var customer = await verifyDb.Customers
+          .AsNoTracking()
+          .SingleAsync(x => x.Id == customerId);
+
+      Assert.Equal(initialBalance, customer.Balance.Amount);
+
+      var operations = await verifyDb.Operations
+          .Where(x => x.ExternalOperationId == externalId)
+          .ToListAsync();
+
+      Assert.Empty(operations);
+
+      var operationIds = operations.Select(x => x.Id).ToArray();
+
+      Assert.Equal(
+          0,
+          await verifyDb.LedgerEntries.CountAsync(
+              x => x.OperationId.HasValue &&
+                   operationIds.Contains(x.OperationId.Value)));
+
+      Assert.Equal(
+          0,
+          await verifyDb.OutboxMessages.CountAsync(
+              x => x.AggregateId.HasValue &&
+                   operationIds.Contains(x.AggregateId.Value)));
+    }
+    finally
+    {
+      await CleanupAsync(externalId, customerId);
+    }
+  }
+
 }

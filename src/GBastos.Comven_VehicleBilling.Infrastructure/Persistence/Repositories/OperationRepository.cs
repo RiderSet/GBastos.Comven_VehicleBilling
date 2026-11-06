@@ -379,21 +379,20 @@ public sealed class OperationRepository : IOperationRepository
          current = current.InnerException)
     {
       if (current is not PostgresException postgresException)
-      {
         continue;
-      }
 
       if (postgresException.SqlState !=
           PostgresErrorCodes.UniqueViolation)
-      {
         continue;
-      }
 
       return string.Equals(
                  postgresException.ConstraintName,
                  "ux_operations_external_operation_id",
                  StringComparison.Ordinal)
-             || IsRequestHashUniqueViolation(exception);
+             || string.Equals(
+                 postgresException.ConstraintName,
+                 "ux_operations_customer_request_hash",
+                 StringComparison.Ordinal);
     }
 
     return false;

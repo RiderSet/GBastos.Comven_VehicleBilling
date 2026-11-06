@@ -141,42 +141,42 @@ public static class CustomerEndpoints
                 BalanceCreditService service,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    var result = await service.CreditAsync(
-                        customerId,
-                        request.ExternalReference,
-                        request.Amount,
-                        cancellationToken);
+              try
+              {
+                var result = await service.CreditAsync(
+                    customerId,
+                    request.ExternalReference,
+                    request.Amount,
+                    cancellationToken);
 
-                    if (result.AlreadyProcessed)
-                        return Results.Ok(result);
+                if (result.AlreadyProcessed)
+                  return Results.Ok(result);
 
-                    return Results.Created(
-                        $"/api/customers/{customerId}/balance/credits/{result.CreditId}",
-                        result);
-                }
-                catch (ArgumentException exception)
+                return Results.Created(
+                    $"/api/customers/{customerId}/balance/credits/{result.CreditId}",
+                    result);
+              }
+              catch (ArgumentException exception)
+              {
+                return Results.BadRequest(new
                 {
-                    return Results.BadRequest(new
-                    {
-                        error = exception.Message
-                    });
-                }
-                catch (KeyNotFoundException exception)
+                  error = exception.Message
+                });
+              }
+              catch (KeyNotFoundException exception)
+              {
+                return Results.NotFound(new
                 {
-                    return Results.NotFound(new
-                    {
-                        error = exception.Message
-                    });
-                }
-                catch (InvalidOperationException exception)
+                  error = exception.Message
+                });
+              }
+              catch (InvalidOperationException exception)
+              {
+                return Results.Conflict(new
                 {
-                    return Results.Conflict(new
-                    {
-                        error = exception.Message
-                    });
-                }
+                  error = exception.Message
+                });
+              }
             })
             .WithName("CreateBalanceCredit")
             .WithSummary("Adiciona saldo pré-pago ao cliente")

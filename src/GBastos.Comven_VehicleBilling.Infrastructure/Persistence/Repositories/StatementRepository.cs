@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Statements;
 using Comven_VehicleBilling.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -76,18 +76,18 @@ public sealed class StatementRepository : IStatementRepository
 
     if (query.CustomerId == Guid.Empty)
       throw new ArgumentException(
-          "O ID do cliente é obrigatório.",
+          "O ID do cliente Ã© obrigatÃ³rio.",
           nameof(query));
 
     if (query.Page < 1)
       throw new ArgumentOutOfRangeException(
           nameof(query.Page),
-          "A página deve ser maior que zero.");
+          "A pÃ¡gina deve ser maior que zero.");
 
     if (query.PageSize < 1 || query.PageSize > 100)
       throw new ArgumentOutOfRangeException(
           nameof(query.PageSize),
-          "O tamanho da página deve estar entre 1 e 100.");
+          "O tamanho da pÃ¡gina deve estar entre 1 e 100.");
 
     var customerExists = await _dbContext.Customers
         .AsNoTracking()
@@ -97,7 +97,7 @@ public sealed class StatementRepository : IStatementRepository
 
     if (!customerExists)
       throw new KeyNotFoundException(
-          "Cliente não encontrado.");
+          "Cliente nÃ£o encontrado.");
 
     var entriesQuery = _dbContext.LedgerEntries
         .AsNoTracking()
@@ -133,3 +133,4 @@ public sealed class StatementRepository : IStatementRepository
         items);
   }
 }
+

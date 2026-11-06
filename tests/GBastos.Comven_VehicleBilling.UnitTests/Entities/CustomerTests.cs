@@ -48,4 +48,21 @@ public sealed class CustomerTests
             Money.Positive(10m),
             DateTimeOffset.UtcNow));
   }
+
+  [Fact]
+  public void Debit_WhenBalanceIsInsufficient_ShouldThrowAndKeepBalanceUnchanged()
+  {
+    var customer = new Customer(
+        Guid.NewGuid(),
+        "Cliente teste",
+        CustomerPlan.Prepaid,
+        Money.Positive(100m),
+        DateTimeOffset.UtcNow);
+
+    Assert.Throws<InvalidOperationException>(
+        () => customer.Debit(Money.Positive(150m)));
+
+    Assert.Equal(100m, customer.Balance.Amount);
+  }
+
 }

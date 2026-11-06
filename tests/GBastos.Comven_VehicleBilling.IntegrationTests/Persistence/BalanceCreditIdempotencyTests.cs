@@ -369,8 +369,9 @@ public sealed class BalanceCreditIdempotencyTests
                 results,
                 result => Assert.Equal(creditId, result.CreditId));
 
-            Assert.Single(results.Where(result =>
-                !result.AlreadyProcessed));
+            Assert.Single(
+                results,
+                result => !result.AlreadyProcessed);
 
             Assert.Equal(
                 requestCount - 1,
@@ -490,3 +491,5 @@ public sealed class BalanceCreditIdempotencyTests
         }
     }
 }
+
+

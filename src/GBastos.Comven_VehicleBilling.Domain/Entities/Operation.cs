@@ -68,6 +68,11 @@ public sealed class Operation
           "O hash não pode ultrapassar 200 caracteres.",
           nameof(requestHash));
 
+    if (createdAt == default)
+      throw new ArgumentException(
+          "A data de criação é obrigatória.",
+          nameof(createdAt));
+
     Id = id;
     ExternalOperationId = externalOperationId;
     CustomerId = customerId;
@@ -111,7 +116,9 @@ public sealed class Operation
     Status = OperationStatus.Refunded;
   }
 
-  public void MarkInvoiced(Guid invoiceId, DateTimeOffset invoicedAt)
+  public void MarkInvoiced(
+      Guid invoiceId,
+      DateTimeOffset invoicedAt)
   {
     if (Status != OperationStatus.AwaitingInvoice)
       throw new InvalidOperationException(

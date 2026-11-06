@@ -154,4 +154,30 @@ internal sealed class VehicleBillingApiClient
         $"api/operations/{operationId}",
         cancellationToken);
   }
+
+  public Task<HttpResponseMessage> GetStatementAsync(
+      Guid customerId,
+      DateOnly startDate,
+      DateOnly endDate,
+      CancellationToken cancellationToken = default)
+  {
+    return _httpClient.GetAsync(
+        $"api/statements/{customerId}" +
+        $"?startDate={startDate:yyyy-MM-dd}" +
+        $"&endDate={endDate:yyyy-MM-dd}",
+        cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> GetStatementEntriesAsync(
+      Guid customerId,
+      int page = 1,
+      int pageSize = 50,
+      CancellationToken cancellationToken = default)
+  {
+    return _httpClient.GetAsync(
+        $"api/statements/{customerId}/entries" +
+        $"?page={page}&pageSize={pageSize}",
+        cancellationToken);
+  }
+
 }

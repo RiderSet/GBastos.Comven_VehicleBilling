@@ -1,4 +1,3 @@
-
 namespace Comven_VehicleBilling.Application.Statements;
 
 public sealed record StatementEntryDto(
