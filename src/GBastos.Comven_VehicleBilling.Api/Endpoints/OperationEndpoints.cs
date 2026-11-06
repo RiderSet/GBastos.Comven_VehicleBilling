@@ -168,10 +168,15 @@ public static class OperationEndpoints
   {
     return new OperationResponse(
         operation.Id,
+        operation.ExternalOperationId,
         operation.CustomerId,
         operation.OperationType,
         operation.Amount,
-        operation.CreatedAt.UtcDateTime);
+        operation.Status,
+        operation.CreatedAt,
+        operation.RefundedAt,
+        operation.InvoicedAt,
+        operation.InvoiceId);
   }
 
   private static OperationDetailResponse ToDetailResponse(

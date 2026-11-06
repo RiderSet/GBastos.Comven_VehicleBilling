@@ -17,16 +17,16 @@ if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var apiUri) ||
 
 using var httpClient = new HttpClient
 {
-  BaseAddress = new Uri(baseUrl + "/"),
+  BaseAddress = new Uri(apiUri.AbsoluteUri.TrimEnd('/') + "/"),
   Timeout = TimeSpan.FromSeconds(30)
 };
 
 var apiClient = new VehicleBillingApiClient(httpClient);
 
 Console.WriteLine("========================================");
-Console.WriteLine(" MonolithSimulator - Registro de operações");
+Console.WriteLine(" MonolithSimulator - VehicleBilling");
 Console.WriteLine("========================================");
-Console.WriteLine($"API: {baseUrl}");
+Console.WriteLine($"API: {apiUri}");
 
 try
 {
@@ -37,21 +37,23 @@ try
 
   if (!health.IsSuccessStatusCode)
   {
-    Console.Error.WriteLine("A API não está saudável.");
+    Console.Error.WriteLine(
+        "A API não está saudável. Verifique o serviço.");
+
     return 1;
   }
 
-  var scenario = new OperationScenarios();
+  Console.WriteLine();
+  Console.WriteLine("API disponível.");
 
   while (true)
   {
     Console.WriteLine();
-    Console.WriteLine("Selecione uma opção:");
+    Console.WriteLine("========================================");
+    Console.WriteLine(" MENU PRINCIPAL");
+    Console.WriteLine("========================================");
     Console.WriteLine();
-    Console.WriteLine("1 - Registrar operação");
-    Console.WriteLine("2 - Consultar operações");
-    Console.WriteLine("3 - Consultar operação por ID");
-    Console.WriteLine("4 - Executar cenário completo");
+    Console.WriteLine("1 - Executar cenário de registro de operações");
     Console.WriteLine("0 - Encerrar");
     Console.WriteLine();
 
@@ -62,19 +64,7 @@ try
     switch (option)
     {
       case "1":
-        await scenario.RegisterOperationAsync(apiClient);
-        break;
-
-      case "2":
-        await scenario.ListOperationsAsync(apiClient);
-        break;
-
-      case "3":
-        await scenario.GetOperationDetailsAsync(apiClient);
-        break;
-
-      case "4":
-        await scenario.ExecuteAsync(apiClient);
+        await OperationScenarios.ExecuteAsync(apiClient);
         break;
 
       case "0":
@@ -82,8 +72,8 @@ try
         return 0;
 
       default:
-        Console.Error.WriteLine("Opção inválida.");
-        break;
+        Console.WriteLine("Opção inválida.");
+        continue;
     }
 
     Console.WriteLine();
@@ -109,6 +99,13 @@ catch (System.Text.Json.JsonException ex)
 {
   Console.Error.WriteLine(
       $"Resposta JSON inválida: {ex.Message}");
+
+  return 1;
+}
+catch (Exception ex)
+{
+  Console.Error.WriteLine(
+      $"Erro durante a execução: {ex.Message}");
 
   return 1;
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
+using Comven_VehicleBilling.MonolithSimulator.Models.Responses;
 
 namespace Comven_VehicleBilling.MonolithSimulator.Clients;
 
@@ -12,6 +13,16 @@ internal sealed class VehicleBillingApiClient
   {
     _httpClient = httpClient
         ?? throw new ArgumentNullException(nameof(httpClient));
+  }
+
+  public async Task<IReadOnlyList<CustomerResponse>> GetCustomersAsync(
+    CancellationToken cancellationToken = default)
+  {
+    var customers = await _httpClient.GetFromJsonAsync<List<CustomerResponse>>(
+        "api/customers/",
+        cancellationToken);
+
+    return customers ?? [];
   }
 
   public Task<HttpResponseMessage> GetHealthAsync(
