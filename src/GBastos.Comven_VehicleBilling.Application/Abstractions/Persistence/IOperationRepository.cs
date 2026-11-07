@@ -12,6 +12,10 @@ public interface IOperationRepository
       Guid id,
       CancellationToken cancellationToken = default);
 
+  Task<RefundOperationResult> RefundAsync(
+    Guid operationId,
+    CancellationToken cancellationToken = default);
+
   Task<OperationPagedResult> GetAllAsync(
       Guid? customerId,
       string? operationType,

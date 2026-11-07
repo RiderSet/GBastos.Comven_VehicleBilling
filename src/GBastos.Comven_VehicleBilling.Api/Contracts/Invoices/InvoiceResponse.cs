@@ -1,9 +1,10 @@
-namespace Comven_VehicleBilling.Api.Contracts.Invoices;
+﻿namespace Comven_VehicleBilling.Api.Contracts.Invoices;
 
 public sealed record InvoiceResponse(
     Guid Id,
     Guid CustomerId,
-    DateOnly ReferenceDate,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
     decimal Amount,
     string Status,
-    DateTime CreatedAt);
+    DateTimeOffset CreatedAt);

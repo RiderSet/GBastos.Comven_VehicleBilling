@@ -54,6 +54,7 @@ try
     Console.WriteLine("========================================");
     Console.WriteLine();
     Console.WriteLine("1 - Executar cenário de registro de operações");
+    Console.WriteLine("2 - Estornar operação");
     Console.WriteLine("0 - Encerrar");
     Console.WriteLine();
 
@@ -65,6 +66,10 @@ try
     {
       case "1":
         await OperationScenarios.ExecuteAsync(apiClient);
+        break;
+
+      case "2":
+        await OperationScenarios.RefundAsync(apiClient);
         break;
 
       case "0":

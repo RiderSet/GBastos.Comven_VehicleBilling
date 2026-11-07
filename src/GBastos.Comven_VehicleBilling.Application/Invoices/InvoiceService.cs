@@ -17,6 +17,7 @@ public sealed class InvoiceService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (command.CustomerId == Guid.Empty)
             throw new ArgumentException(
@@ -36,6 +37,8 @@ public sealed class InvoiceService
         Guid id,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (id == Guid.Empty)
             throw new ArgumentException(
                 "O identificador da fatura é inválido.",
@@ -49,6 +52,8 @@ public sealed class InvoiceService
         Guid? customerId = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (customerId == Guid.Empty)
             throw new ArgumentException(
                 "O identificador do cliente é inválido.",

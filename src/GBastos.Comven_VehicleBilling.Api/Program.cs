@@ -3,6 +3,38 @@ using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
 
+// Localiza o .env na raiz do repositório.
+static string? FindEnvFile()
+{
+  var directory = new DirectoryInfo(
+      Directory.GetCurrentDirectory());
+
+  while (directory is not null)
+  {
+    var envPath = Path.Combine(directory.FullName, ".env");
+
+    if (File.Exists(envPath))
+      return envPath;
+
+    directory = directory.Parent;
+  }
+
+  return null;
+}
+
+// Carrega as variáveis antes de configurar a aplicação.
+var envFile = FindEnvFile();
+
+if (envFile is not null)
+{
+  DotNetEnv.Env.Load(envFile);
+}
+else
+{
+  throw new FileNotFoundException(
+      "Arquivo .env não encontrado na raiz do repositório.");
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration
@@ -14,7 +46,7 @@ builder.Configuration
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Configuration.AddUserSecrets<Program>(optional: true);
+  builder.Configuration.AddUserSecrets<Program>(optional: true);
 }
 
 builder.Configuration.AddEnvironmentVariables();

@@ -38,20 +38,16 @@ public static class InvoiceEndpoints
         CancellationToken cancellationToken)
     {
         if (request.CustomerId == Guid.Empty)
-        {
             return Results.Problem(
                 title: "Cliente inválido",
                 detail: "Informe um identificador válido.",
                 statusCode: StatusCodes.Status400BadRequest);
-        }
 
         if (request.ReferenceDate == DateOnly.MinValue)
-        {
             return Results.Problem(
                 title: "Data de referência inválida",
                 detail: "Informe uma data de referência válida.",
                 statusCode: StatusCodes.Status400BadRequest);
-        }
 
         try
         {
@@ -66,6 +62,13 @@ public static class InvoiceEndpoints
             return Results.Created(
                 $"/api/invoices/{invoice.Id}",
                 response);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.Problem(
+                title: "Dados da fatura inválidos",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status400BadRequest);
         }
         catch (InvalidOperationException exception)
         {
@@ -99,12 +102,10 @@ public static class InvoiceEndpoints
         CancellationToken cancellationToken)
     {
         if (customerId == Guid.Empty)
-        {
             return Results.Problem(
                 title: "Cliente inválido",
                 detail: "O identificador do cliente não pode ser vazio.",
                 statusCode: StatusCodes.Status400BadRequest);
-        }
 
         var invoices = await service.GetAllAsync(
             customerId, cancellationToken);
@@ -116,7 +117,8 @@ public static class InvoiceEndpoints
         => new(
             invoice.Id,
             invoice.CustomerId,
-            invoice.ReferenceDate,
+            invoice.PeriodStart,
+            invoice.PeriodEnd,
             invoice.Amount,
             invoice.Status,
             invoice.CreatedAt);

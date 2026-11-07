@@ -23,6 +23,146 @@ public sealed class OperationRepository : IOperationRepository
         ?? throw new ArgumentNullException(nameof(dbContext));
   }
 
+  public async Task<RefundOperationResult> RefundAsync(
+    Guid operationId,
+    CancellationToken cancellationToken = default)
+  {
+    if (operationId == Guid.Empty)
+    {
+      throw new ArgumentException(
+          "O identificador da operação é obrigatório.",
+          nameof(operationId));
+    }
+
+    await using var transaction =
+        await _dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
+    // Primeiro bloqueia o cliente.
+    // O fluxo de criação também bloqueia o cliente,
+    // portanto ambos seguem a mesma ordem de bloqueio.
+    var operationForCustomer = await _dbContext.Operations
+        .AsNoTracking()
+        .Where(operation => operation.Id == operationId)
+        .Select(operation => new
+        {
+          operation.Id,
+          operation.CustomerId
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (operationForCustomer is null)
+    {
+      throw new KeyNotFoundException(
+          "A operação informada não foi encontrada.");
+    }
+
+    var customer = await _dbContext.Customers
+        .FromSqlInterpolated(
+            $"SELECT * FROM customers WHERE id = {operationForCustomer.CustomerId} FOR UPDATE")
+        .SingleOrDefaultAsync(cancellationToken);
+
+    if (customer is null)
+    {
+      throw new InvalidOperationException(
+          "O cliente da operação não foi encontrado.");
+    }
+
+    // Agora bloqueia a operação dentro da mesma transação.
+    var operation = await _dbContext.Operations
+        .FromSqlInterpolated(
+            $"SELECT * FROM operations WHERE id = {operationId} FOR UPDATE")
+        .SingleOrDefaultAsync(cancellationToken);
+
+    if (operation is null)
+    {
+      throw new KeyNotFoundException(
+          "A operação informada não foi encontrada.");
+    }
+
+    // Idempotência do estorno.
+    // Uma segunda chamada não devolve dinheiro novamente.
+    if (operation.Status == OperationStatus.Refunded)
+    {
+      var alreadyRefundedDetail =
+          await BuildOperationDetailAsync(
+              operation,
+              cancellationToken);
+
+      await transaction.CommitAsync(cancellationToken);
+
+      return new RefundOperationResult(
+          alreadyRefundedDetail,
+          true);
+    }
+
+    if (operation.Status != OperationStatus.Charged)
+    {
+      throw new InvalidOperationException(
+          "Somente operações cobradas podem ser reembolsadas.");
+    }
+
+    if (customer.Plan != CustomerPlan.Prepaid)
+    {
+      throw new InvalidOperationException(
+          "Somente operações pré-pagas podem ser reembolsadas.");
+    }
+
+    var now = DateTimeOffset.UtcNow;
+
+    // Devolve exatamente o valor originalmente cobrado.
+    customer.Credit(operation.Amount);
+
+    // Altera o estado da operação.
+    operation.MarkRefunded(now);
+
+    // Crédito financeiro vinculado à operação.
+    var refundLedgerEntry = LedgerEntry.CreateRefundCredit(
+        Guid.NewGuid(),
+        customer.Id,
+        operation.Id,
+        operation.Amount,
+        $"Estorno da operação {operation.Type}",
+        now);
+
+    await _dbContext.LedgerEntries.AddAsync(
+        refundLedgerEntry,
+        cancellationToken);
+
+    // Evento Outbox na mesma transação.
+    var eventPayload = JsonSerializer.Serialize(new
+    {
+      EventId = Guid.NewGuid(),
+      OperationId = operation.Id,
+      ExternalOperationId = operation.ExternalOperationId,
+      CustomerId = operation.CustomerId,
+      OperationType = operation.Type.ToString(),
+      Amount = operation.Amount.Amount,
+      RefundedAt = now.UtcDateTime
+    });
+
+    var outboxMessage = new OutboxMessage(
+        "OperationRefunded.v1",
+        operation.Id,
+        eventPayload);
+
+    await _dbContext.OutboxMessages.AddAsync(
+        outboxMessage,
+        cancellationToken);
+
+    await _dbContext.SaveChangesAsync(cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+
+    var detail = await BuildOperationDetailAsync(
+        operation,
+        cancellationToken);
+
+    return new RefundOperationResult(
+        detail,
+        false);
+  }
+
   public async Task<OperationDto> CreateAsync(
       CreateOperationCommand command,
       CancellationToken cancellationToken = default)
@@ -431,4 +571,37 @@ public sealed class OperationRepository : IOperationRepository
           RefundedAt: operation.RefundedAt,
           InvoicedAt: operation.InvoicedAt,
           InvoiceId: operation.InvoiceId);
+
+  private async Task<OperationDetailDto> BuildOperationDetailAsync(
+      Operation operation,
+      CancellationToken cancellationToken)
+  {
+    var ledgerEntries = await _dbContext.LedgerEntries
+        .AsNoTracking()
+        .Where(entry => entry.OperationId == operation.Id)
+        .OrderBy(entry => entry.CreatedAt)
+        .ThenBy(entry => entry.Id)
+        .ToListAsync(cancellationToken);
+
+    var ledgerDtos = ledgerEntries
+        .Select(entry => new OperationLedgerEntryDto(
+            entry.Id,
+            entry.Type.ToString(),
+            entry.Amount.Amount,
+            entry.Description,
+            entry.CreatedAt))
+        .ToList();
+
+    return new OperationDetailDto(
+        operation.Id,
+        operation.CustomerId,
+        operation.Type.ToString(),
+        operation.Amount.Amount,
+        operation.Status.ToString(),
+        operation.CreatedAt,
+        operation.InvoicedAt,
+        operation.RefundedAt,
+        operation.InvoiceId,
+        ledgerDtos);
+  }
 }

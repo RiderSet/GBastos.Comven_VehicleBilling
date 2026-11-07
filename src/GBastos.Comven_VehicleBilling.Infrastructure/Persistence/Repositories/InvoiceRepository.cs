@@ -150,7 +150,9 @@ public sealed class InvoiceRepository : IInvoiceRepository
             invoice.Id,
             invoice.CustomerId,
             invoice.PeriodStart,
+            invoice.PeriodEnd,
             invoice.Total.Amount,
             invoice.Status.ToString(),
-            invoice.CreatedAt.UtcDateTime);
+            invoice.CreatedAt);
 }
+

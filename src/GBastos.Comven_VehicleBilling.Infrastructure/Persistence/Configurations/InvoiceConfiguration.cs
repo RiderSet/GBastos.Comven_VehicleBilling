@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Domain.Entities;
+﻿using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -79,3 +79,6 @@ public sealed class InvoiceConfiguration
         .HasDatabaseName("ix_invoices_status_created_at");
   }
 }
+
+
+

@@ -272,6 +272,116 @@ internal static class OperationScenarios
     Console.WriteLine("======================================");
   }
 
+  public static async Task RefundAsync(
+      VehicleBillingApiClient client,
+      CancellationToken cancellationToken = default)
+  {
+    ArgumentNullException.ThrowIfNull(client);
+
+    Console.WriteLine();
+    Console.WriteLine("======================================");
+    Console.WriteLine(" CENÁRIO: ESTORNO DE OPERAÇÃO");
+    Console.WriteLine("======================================");
+
+    Console.WriteLine();
+    Console.Write("Informe o ID da operação: ");
+
+    var input = Console.ReadLine()?.Trim();
+
+    if (!Guid.TryParse(input, out var operationId) ||
+        operationId == Guid.Empty)
+    {
+      Console.WriteLine("Identificador de operação inválido.");
+      return;
+    }
+
+    // Consultar a operação antes do estorno.
+    Console.WriteLine();
+    Console.WriteLine("Consultando operação...");
+
+    using var operationResponse = await client.GetOperationByIdAsync(
+        operationId,
+        cancellationToken);
+
+    await EnsureSuccessAsync(
+        operationResponse,
+        "Consulta da operação");
+
+    var operationJson = await operationResponse.Content.ReadAsStringAsync(
+        cancellationToken);
+
+    using var operationDocument = JsonDocument.Parse(operationJson);
+
+    var operation = operationDocument.RootElement;
+
+    Console.WriteLine($"Operação: {operationId}");
+
+    if (operation.TryGetProperty("amount", out var amountElement))
+      Console.WriteLine($"Valor: R$ {amountElement.GetDecimal():N2}");
+
+    if (operation.TryGetProperty("status", out var statusElement))
+      Console.WriteLine($"Status atual: {statusElement.GetString()}");
+
+    Console.WriteLine();
+    Console.Write("Confirma o estorno integral? (S/N): ");
+
+    var confirmation = Console.ReadLine()?.Trim();
+
+    if (!string.Equals(
+            confirmation,
+            "S",
+            StringComparison.OrdinalIgnoreCase))
+    {
+      Console.WriteLine("Estorno cancelado pelo usuário.");
+      return;
+    }
+
+    // Executar estorno na API.
+    Console.WriteLine();
+    Console.WriteLine("Solicitando estorno...");
+
+    using var refundResponse = await client.RefundOperationAsync(
+        operationId,
+        cancellationToken);
+
+    await EnsureSuccessAsync(
+        refundResponse,
+        "Estorno da operação");
+
+    var refundJson = await refundResponse.Content.ReadAsStringAsync(
+        cancellationToken);
+
+    using var refundDocument = JsonDocument.Parse(refundJson);
+
+    var refundedOperation = refundDocument.RootElement;
+
+    Console.WriteLine();
+    Console.WriteLine("======================================");
+    Console.WriteLine(" ESTORNO REALIZADO COM SUCESSO");
+    Console.WriteLine("======================================");
+
+    Console.WriteLine($"Operação: {operationId}");
+
+    if (refundedOperation.TryGetProperty(
+            "status", out var refundedStatus))
+    {
+      Console.WriteLine(
+          $"Novo status: {refundedStatus.GetString()}");
+    }
+
+    if (refundedOperation.TryGetProperty(
+            "refundedAt", out var refundedAt) &&
+        refundedAt.ValueKind != JsonValueKind.Null)
+    {
+      Console.WriteLine(
+          $"Data do estorno: {refundedAt.GetString()}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Resposta completa da API:");
+    Console.WriteLine(refundJson);
+  }
+
   private static async Task EnsureSuccessAsync(
       HttpResponseMessage response,
       string operation)

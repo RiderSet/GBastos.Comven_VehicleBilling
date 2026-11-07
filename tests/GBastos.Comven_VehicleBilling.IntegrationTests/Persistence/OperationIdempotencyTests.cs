@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Operations;
+﻿using Comven_VehicleBilling.Application.Operations;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
@@ -63,7 +63,7 @@ public sealed class OperationIdempotencyTests
   {
     await using var db = CreateDbContext();
 
-    // Localiza todas as operações do cliente associadas
+    // Localiza todas as operaÃ§Ãµes do cliente associadas
     // ao identificador externo informado.
     var operations = await db.Operations
         .Where(operation =>
@@ -94,7 +94,7 @@ public sealed class OperationIdempotencyTests
 
     await db.SaveChangesAsync();
 
-    // Só remove o cliente quando não houver outras operações
+    // SÃ³ remove o cliente quando nÃ£o houver outras operaÃ§Ãµes
     // vinculadas a ele.
     var customer = await db.Customers
         .SingleOrDefaultAsync(item => item.Id == customerId);
@@ -476,3 +476,5 @@ public sealed class OperationIdempotencyTests
   }
 
 }
+
+

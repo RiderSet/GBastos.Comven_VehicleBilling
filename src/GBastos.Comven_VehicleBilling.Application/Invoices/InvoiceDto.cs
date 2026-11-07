@@ -1,9 +1,10 @@
-namespace Comven_VehicleBilling.Application.Invoices;
+﻿namespace Comven_VehicleBilling.Application.Invoices;
 
 public sealed record InvoiceDto(
     Guid Id,
     Guid CustomerId,
-    DateOnly ReferenceDate,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
     decimal Amount,
     string Status,
-    DateTime CreatedAt);
+    DateTimeOffset CreatedAt);

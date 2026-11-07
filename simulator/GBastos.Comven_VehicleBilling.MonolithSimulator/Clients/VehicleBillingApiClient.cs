@@ -155,6 +155,20 @@ internal sealed class VehicleBillingApiClient
         cancellationToken);
   }
 
+  public Task<HttpResponseMessage> RefundOperationAsync(
+      Guid operationId,
+      CancellationToken cancellationToken = default)
+  {
+    if (operationId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador da operação é obrigatório.",
+          nameof(operationId));
+
+    return _httpClient.PostAsync(
+        $"api/operations/{operationId}/refund",
+        content: null,
+        cancellationToken);
+  }
   public Task<HttpResponseMessage> GetStatementAsync(
       Guid customerId,
       DateOnly startDate,

@@ -97,6 +97,45 @@ public sealed class LedgerEntry
     };
   }
 
+  // Fábrica para crédito financeiro originado por estorno de operação.
+  public static LedgerEntry CreateRefundCredit(
+      Guid id,
+      Guid customerId,
+      Guid operationId,
+      Money amount,
+      string description,
+      DateTimeOffset createdAt)
+  {
+    ValidateCommon(
+        id,
+        customerId,
+        amount,
+        LedgerEntryType.Credit,
+        description);
+
+    if (operationId == Guid.Empty)
+      throw new ArgumentException(
+          "O ID da operação é obrigatório.",
+          nameof(operationId));
+
+    if (createdAt == default)
+      throw new ArgumentException(
+          "A data do lançamento é obrigatória.",
+          nameof(createdAt));
+
+    return new LedgerEntry
+    {
+      Id = id,
+      CustomerId = customerId,
+      OperationId = operationId,
+      BalanceCreditId = null,
+      Amount = amount,
+      Type = LedgerEntryType.Credit,
+      Description = description.Trim(),
+      CreatedAt = createdAt
+    };
+  }
+
   private static void ValidateCommon(
       Guid id,
       Guid customerId,
