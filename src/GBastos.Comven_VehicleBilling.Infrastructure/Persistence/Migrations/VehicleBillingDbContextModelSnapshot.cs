@@ -207,7 +207,7 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ledger_entries", null, t =>
                         {
-                            t.HasCheckConstraint("ck_ledger_entries_exactly_one_origin", "(\n    \"operation_id\" IS NOT NULL\n    AND \"balance_credit_id\" IS NULL\n    AND \"type\" = 1\n)\nOR\n(\n    \"operation_id\" IS NULL\n    AND \"balance_credit_id\" IS NOT NULL\n    AND \"type\" = 2\n)");
+                            t.HasCheckConstraint("ck_ledger_entries_exactly_one_origin", "(\r\n    \"operation_id\" IS NOT NULL\r\n    AND \"balance_credit_id\" IS NULL\r\n    AND \"type\" IN (1, 2)\r\n)\r\nOR\r\n(\r\n    \"operation_id\" IS NULL\r\n    AND \"balance_credit_id\" IS NOT NULL\r\n    AND \"type\" = 2\r\n)");
                         });
                 });
 
