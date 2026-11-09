@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.MonolithSimulator.Clients;
+﻿using Comven_VehicleBilling.MonolithSimulator.Clients;
 using Comven_VehicleBilling.MonolithSimulator.Scenarios;
 
 var baseUrl = args.Length > 0
@@ -10,7 +10,7 @@ if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var apiUri) ||
      apiUri.Scheme != Uri.UriSchemeHttps))
 {
   Console.Error.WriteLine(
-      "Informe uma URL HTTP ou HTTPS válida.");
+      "Informe uma URL HTTP ou HTTPS vÃ¡lida.");
 
   return 1;
 }
@@ -38,13 +38,13 @@ try
   if (!health.IsSuccessStatusCode)
   {
     Console.Error.WriteLine(
-        "A API não está saudável. Verifique o serviço.");
+        "A API nÃ£o estÃ¡ saudÃ¡vel. Verifique o serviÃ§o.");
 
     return 1;
   }
 
   Console.WriteLine();
-  Console.WriteLine("API disponível.");
+  Console.WriteLine("API disponÃ­vel.");
 
   while (true)
   {
@@ -53,12 +53,14 @@ try
     Console.WriteLine(" MENU PRINCIPAL");
     Console.WriteLine("========================================");
     Console.WriteLine();
-    Console.WriteLine("1 - Executar cenário de registro de operações");
+    Console.WriteLine("1 - Executar cenÃ¡rio de registro de operaÃ§Ãµes");
     Console.WriteLine("2 - Estornar operação");
+    Console.WriteLine("3 - Gerar fatura pós-paga");
+    Console.WriteLine("4 - Consultar fatura");
     Console.WriteLine("0 - Encerrar");
     Console.WriteLine();
 
-    Console.Write("Opção: ");
+    Console.Write("OpÃ§Ã£o: ");
 
     var option = Console.ReadLine()?.Trim();
 
@@ -72,12 +74,20 @@ try
         await OperationScenarios.RefundAsync(apiClient);
         break;
 
+      case "3":
+        await InvoiceScenarios.CreateAsync(apiClient);
+        break;
+
+      case "4":
+        await InvoiceScenarios.GetAsync(apiClient);
+        break;
+
       case "0":
         Console.WriteLine("Simulador encerrado.");
         return 0;
 
       default:
-        Console.WriteLine("Opção inválida.");
+        Console.WriteLine("OpÃ§Ã£o invÃ¡lida.");
         continue;
     }
 
@@ -89,7 +99,7 @@ try
 catch (HttpRequestException ex)
 {
   Console.Error.WriteLine(
-      $"Erro de comunicação com a API: {ex.Message}");
+      $"Erro de comunicaÃ§Ã£o com a API: {ex.Message}");
 
   return 1;
 }
@@ -103,14 +113,16 @@ catch (TaskCanceledException)
 catch (System.Text.Json.JsonException ex)
 {
   Console.Error.WriteLine(
-      $"Resposta JSON inválida: {ex.Message}");
+      $"Resposta JSON invÃ¡lida: {ex.Message}");
 
   return 1;
 }
 catch (Exception ex)
 {
   Console.Error.WriteLine(
-      $"Erro durante a execução: {ex.Message}");
+      $"Erro durante a execuÃ§Ã£o: {ex.Message}");
 
   return 1;
 }
+
+

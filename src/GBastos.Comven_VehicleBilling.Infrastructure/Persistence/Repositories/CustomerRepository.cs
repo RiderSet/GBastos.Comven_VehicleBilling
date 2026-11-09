@@ -26,9 +26,11 @@ public sealed class CustomerRepository : ICustomerRepository
         var customer = new Customer(
             Guid.NewGuid(),
             command.Name,
-            CustomerPlan.Prepaid,
+            command.Plan,
             Money.Zero,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            command.Document,
+            command.Email);
 
         await _dbContext.Customers.AddAsync(customer, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -36,8 +38,9 @@ public sealed class CustomerRepository : ICustomerRepository
         return new CustomerDto(
             customer.Id,
             customer.Name,
-            command.Document.Trim(),
-            command.Email.Trim());
+            customer.Document,
+            customer.Email,
+            customer.Plan);
     }
 
     public async Task<CustomerDto?> GetByIdAsync(
@@ -56,8 +59,9 @@ public sealed class CustomerRepository : ICustomerRepository
         return new CustomerDto(
             customer.Id,
             customer.Name,
-            string.Empty,
-            string.Empty);
+            customer.Document,
+            customer.Email,
+            customer.Plan);
     }
 
     public async Task<IReadOnlyList<CustomerDto>> GetAllAsync(
@@ -72,30 +76,32 @@ public sealed class CustomerRepository : ICustomerRepository
             .Select(customer => new CustomerDto(
                 customer.Id,
                 customer.Name,
-                string.Empty,
-                string.Empty))
+                customer.Document,
+                customer.Email,
+                customer.Plan))
             .ToList();
     }
-  public async Task<CustomerBalanceDto?> GetBalanceAsync(
-      Guid customerId,
-      CancellationToken cancellationToken = default)
-  {
-    var customer = await _dbContext.Customers
-        .AsNoTracking()
-        .Where(item => item.Id == customerId)
-        .Select(item => new
-        {
-          item.Id,
-          Balance = item.Balance.Amount
-        })
-        .FirstOrDefaultAsync(cancellationToken);
 
-    if (customer is null)
-      return null;
+    public async Task<CustomerBalanceDto?> GetBalanceAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var customer = await _dbContext.Customers
+            .AsNoTracking()
+            .Where(item => item.Id == customerId)
+            .Select(item => new
+            {
+                item.Id,
+                Balance = item.Balance.Amount
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-    return new CustomerBalanceDto(
-        customer.Id,
-        customer.Balance,
-        "BRL");
-  }
+        if (customer is null)
+            return null;
+
+        return new CustomerBalanceDto(
+            customer.Id,
+            customer.Balance,
+            "BRL");
+    }
 }

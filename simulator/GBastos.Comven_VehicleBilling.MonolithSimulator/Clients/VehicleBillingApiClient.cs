@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Http.Json;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
 using Comven_VehicleBilling.MonolithSimulator.Models.Responses;
@@ -72,7 +72,7 @@ internal sealed class VehicleBillingApiClient
 
     if (customerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente é obrigatório.",
+          "O identificador do cliente Ã© obrigatÃ³rio.",
           nameof(customerId));
 
     if (amount <= 0)
@@ -104,7 +104,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId.HasValue && customerId.Value == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente é inválido.",
+          "O identificador do cliente Ã© invÃ¡lido.",
           nameof(customerId));
 
     if (page < 1)
@@ -147,7 +147,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operação é obrigatório.",
+          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(operationId));
 
     return _httpClient.GetAsync(
@@ -161,7 +161,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operação é obrigatório.",
+          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(operationId));
 
     return _httpClient.PostAsync(
@@ -194,4 +194,60 @@ internal sealed class VehicleBillingApiClient
         cancellationToken);
   }
 
-}
+
+  public Task<HttpResponseMessage> CreateInvoiceAsync(
+      Guid customerId,
+      DateOnly referenceDate,
+      CancellationToken cancellationToken = default)
+  {
+    if (customerId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é obrigatório.",
+          nameof(customerId));
+
+    if (referenceDate == DateOnly.MinValue)
+      throw new ArgumentException(
+          "A data de referência é obrigatória.",
+          nameof(referenceDate));
+
+    var request = new
+    {
+      CustomerId = customerId,
+      ReferenceDate = referenceDate
+    };
+
+    return _httpClient.PostAsJsonAsync(
+        "api/invoices/",
+        request,
+        cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> GetInvoiceByIdAsync(
+      Guid invoiceId,
+      CancellationToken cancellationToken = default)
+  {
+    if (invoiceId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador da fatura é obrigatório.",
+          nameof(invoiceId));
+
+    return _httpClient.GetAsync(
+        $"api/invoices/{invoiceId}",
+        cancellationToken);
+  }
+
+  public Task<HttpResponseMessage> GetInvoicesAsync(
+      Guid? customerId = null,
+      CancellationToken cancellationToken = default)
+  {
+    if (customerId.HasValue && customerId.Value == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é inválido.",
+          nameof(customerId));
+
+    var url = customerId.HasValue
+        ? $"api/invoices/?customerId={customerId.Value}"
+        : "api/invoices/";
+
+    return _httpClient.GetAsync(url, cancellationToken);
+  }}

@@ -17,6 +17,8 @@ public static class DependencyInjection
   {
     AddPersistence(services, configuration);
 
+    services.AddScoped<IUnitOfWork, UnitOfWork>();
+
     services.AddScoped<OutboxRepository>();
     services.AddSingleton<IBillingProvider, BillingProvider>();
     services.AddSingleton<RabbitMqPublisher>();

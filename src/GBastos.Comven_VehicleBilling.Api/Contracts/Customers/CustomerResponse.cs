@@ -1,7 +1,8 @@
-namespace Comven_VehicleBilling.Api.Contracts.Customers;
+﻿namespace Comven_VehicleBilling.Api.Contracts.Customers;
 
 public sealed record CustomerResponse(
     Guid Id,
     string Name,
     string Document,
-    string Email);
+    string Email,
+    string Plan);
