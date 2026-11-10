@@ -92,7 +92,7 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
       {
         throw new InvalidOperationException(
             "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
-            "e RABBITMQ_VHOST nas variáveis de ambiente.");
+            "e RABBITMQ_VHOST nas variÃƒÂ¡veis de ambiente.");
       }
 
       var factory = new ConnectionFactory
@@ -109,12 +109,19 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
       };
 
+      using var sha = System.Security.Cryptography.SHA256.Create();
+
+      var passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
+      var passwordHash = BitConverter.ToString(
+          sha.ComputeHash(passwordBytes)).Replace("-", "");
+
       Console.WriteLine(
           $"RABBITMQ_DIAG Host={factory.HostName} " +
           $"Port={factory.Port} " +
           $"User={factory.UserName} " +
           $"VHost={factory.VirtualHost} " +
-          $"PasswordLength={password?.Length ?? 0}");
+          $"PasswordLength={password?.Length ?? 0} " +
+          $"PasswordFingerprint={passwordHash}");
 
       _connection = await factory.CreateConnectionAsync(
 
@@ -138,7 +145,7 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-        "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
+        "ConexÃƒÂ£o RabbitMQ estabelecida. Fila: {QueueName}.",
         QueueName);
   }
 
@@ -153,3 +160,4 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
     _publishLock.Dispose();
   }
 }
+
