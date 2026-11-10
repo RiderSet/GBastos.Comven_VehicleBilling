@@ -1,8 +1,7 @@
-﻿using Comven_VehicleBilling.Infrastructure.Persistence;
+using Comven_VehicleBilling.Infrastructure.Persistence;
 using Comven_VehicleBilling.Worker.Workers;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Comven_VehicleBilling.WorkerService;
+using Comven_VehicleBilling.WorkerService.Events;
 
 static string? FindEnvFile()
 {
@@ -27,7 +26,7 @@ var envFile = FindEnvFile();
 if (envFile is null)
 {
     throw new FileNotFoundException(
-        "Arquivo .env não encontrado na raiz do repositório.");
+        "Arquivo .env nÃ£o encontrado na raiz do repositÃ³rio.");
 }
 
 DotNetEnv.Env.Load(envFile);
@@ -41,12 +40,18 @@ builder.Configuration
         reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// Registra PostgreSQL, repositório da Outbox e RabbitMQ.
+// Registra PostgreSQL, repositÃ³rio da Outbox e RabbitMQ.
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Inicia o processamento da Outbox em segundo plano.
+// Handlers e consumidores de mensagens.
+builder.Services.AddScoped<OperationCreatedHandler>();
+builder.Services.AddScoped<OperationRefundedHandler>();
+
+// Publica eventos da Outbox e consome eventos com Inbox/idempotÃªncia.
 builder.Services.AddHostedService<OutboxWorker>();
+builder.Services.AddHostedService<RabbitMqConsumer>();
 
 var host = builder.Build();
 
 await host.RunAsync();
+

@@ -1,9 +1,9 @@
+using System.Text.Json;
 using Comven_VehicleBilling.Infrastructure.Inbox;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Comven_VehicleBilling.Infrastructure.Persistence;
+using Comven_VehicleBilling.WorkerService.Events;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using System.Text;
 
 namespace Comven_VehicleBilling.WorkerService;
 
@@ -34,9 +34,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     var consumer = new AsyncEventingBasicConsumer(_channel!);
 
     consumer.ReceivedAsync += async (_, args) =>
-    {
-      await ProcessMessageAsync(args, stoppingToken);
-    };
+        await ProcessMessageAsync(args, stoppingToken);
 
     await _channel!.BasicConsumeAsync(
         queue: QueueName,
@@ -56,8 +54,9 @@ public sealed class RabbitMqConsumer : BackgroundService
           stoppingToken);
     }
     catch (OperationCanceledException)
+        when (stoppingToken.IsCancellationRequested)
     {
-      // Encerramento normal do Worker.
+      // Mensagens sem ACK serão reentregues pelo RabbitMQ.
     }
   }
 
@@ -65,134 +64,206 @@ public sealed class RabbitMqConsumer : BackgroundService
       BasicDeliverEventArgs args,
       CancellationToken cancellationToken)
   {
-    if (_channel is null)
-    {
+    var channel = _channel;
+
+    if (channel is null || !channel.IsOpen)
       return;
-    }
 
     var messageId = GetMessageId(args);
 
     if (messageId == Guid.Empty)
     {
       _logger.LogError(
-          "Mensagem recebida sem MessageId válido. " +
-          "DeliveryTag={DeliveryTag}.",
+          "Mensagem sem MessageId GUID válido. DeliveryTag={DeliveryTag}.",
           args.DeliveryTag);
 
-      await _channel.BasicNackAsync(
-          deliveryTag: args.DeliveryTag,
-          multiple: false,
-          requeue: false,
-          cancellationToken: cancellationToken);
+      await RejectMessageAsync(
+          channel,
+          args.DeliveryTag);
 
       return;
     }
 
     try
     {
-      using var scope =
-          _scopeFactory.CreateScope();
+      ValidateEventId(args.Body, messageId);
+
+      await using var scope =
+          _scopeFactory.CreateAsyncScope();
+
+      var services = scope.ServiceProvider;
 
       var dbContext =
-          scope.ServiceProvider
-              .GetRequiredService<
-                  Infrastructure.Persistence.VehicleBillingDbContext>();
+          services.GetRequiredService<VehicleBillingDbContext>();
 
-      var inboxRepository =
-          scope.ServiceProvider
-              .GetRequiredService<InboxRepository>();
+      var inbox =
+          services.GetRequiredService<InboxRepository>();
+
+      var createdHandler =
+          services.GetRequiredService<OperationCreatedHandler>();
+
+      var refundedHandler =
+          services.GetRequiredService<OperationRefundedHandler>();
 
       await using var transaction =
           await dbContext.Database.BeginTransactionAsync(
               cancellationToken);
 
-      var alreadyProcessed =
-          await inboxRepository.ExistsAsync(
-              messageId,
-              ConsumerName,
-              cancellationToken);
-
-      if (alreadyProcessed)
-      {
-        await transaction.CommitAsync(
-            cancellationToken);
-
-        await _channel.BasicAckAsync(
-            deliveryTag: args.DeliveryTag,
-            multiple: false,
-            cancellationToken: cancellationToken);
-
-        _logger.LogInformation(
-            "Mensagem {MessageId} já processada pelo consumidor " +
-            "{ConsumerName}. ACK realizado.",
-            messageId,
-            ConsumerName);
-
-        return;
-      }
-
-      var payload =
-          Encoding.UTF8.GetString(args.Body.ToArray());
-
-      _logger.LogInformation(
-          "Processando mensagem {MessageId}. Type={MessageType}.",
-          messageId,
-          args.BasicProperties.Type);
-
-      // O processamento específico do evento entra aqui.
-      //
-      // Neste primeiro passo estamos estabelecendo o mecanismo
-      // transacional de Inbox + processamento + ACK.
-      //
-      // O handler de OperationCreated será conectado aqui.
-
-      await inboxRepository.AddAsync(
+      var registered = await inbox.TryRegisterAsync(
           messageId,
           ConsumerName,
           cancellationToken);
 
-      await dbContext.SaveChangesAsync(
-          cancellationToken);
+      if (!registered)
+      {
+        await transaction.CommitAsync(cancellationToken);
 
-      await transaction.CommitAsync(
-          cancellationToken);
+        await channel.BasicAckAsync(
+            args.DeliveryTag,
+            multiple: false,
+            cancellationToken: cancellationToken);
 
-      await _channel.BasicAckAsync(
-          deliveryTag: args.DeliveryTag,
+        _logger.LogInformation(
+            "Mensagem {MessageId} já consta na Inbox. ACK realizado.",
+            messageId);
+
+        return;
+      }
+
+      var messageType = args.BasicProperties.Type;
+
+      switch (messageType)
+      {
+        case "OperationCreated.v1":
+          await createdHandler.HandleAsync(
+              args.Body,
+              cancellationToken);
+          break;
+
+        case "OperationRefunded.v1":
+          await refundedHandler.HandleAsync(
+              args.Body,
+              cancellationToken);
+          break;
+
+        default:
+          throw new PermanentMessageException(
+              $"Tipo de mensagem não suportado: {messageType ?? "(vazio)"}.");
+      }
+
+      // Persiste a Inbox e as alterações dos handlers
+      // na mesma transação PostgreSQL.
+      await dbContext.SaveChangesAsync(cancellationToken);
+
+      // Primeiro confirma a transação no PostgreSQL.
+      await transaction.CommitAsync(cancellationToken);
+
+      // Somente depois confirma a mensagem no RabbitMQ.
+      await channel.BasicAckAsync(
+          args.DeliveryTag,
           multiple: false,
           cancellationToken: cancellationToken);
 
       _logger.LogInformation(
-          "Mensagem {MessageId} processada e confirmada.",
+          "Mensagem {MessageId} processada, persistida na Inbox e confirmada.",
           messageId);
+    }
+    catch (OperationCanceledException)
+        when (cancellationToken.IsCancellationRequested)
+    {
+      // Não confirmar.
+      // O RabbitMQ poderá reentregar a mensagem.
+    }
+    catch (PermanentMessageException exception)
+    {
+      _logger.LogError(
+          exception,
+          "Mensagem {MessageId} rejeitada por conteúdo inválido.",
+          messageId);
+
+      await RejectMessageAsync(
+          channel,
+          args.DeliveryTag);
     }
     catch (Exception exception)
     {
       _logger.LogError(
           exception,
-          "Erro ao processar mensagem {MessageId}. " +
-          "A mensagem será devolvida à fila.",
+          "Falha transitória ao processar {MessageId}; mensagem será reentregue.",
           messageId);
 
-      await _channel.BasicNackAsync(
-          deliveryTag: args.DeliveryTag,
-          multiple: false,
-          requeue: true,
-          cancellationToken: cancellationToken);
+      if (channel.IsOpen)
+      {
+        await channel.BasicNackAsync(
+            args.DeliveryTag,
+            multiple: false,
+            requeue: true,
+            cancellationToken: CancellationToken.None);
+      }
+    }
+  }
+
+  private static void ValidateEventId(
+      ReadOnlyMemory<byte> body,
+      Guid messageId)
+  {
+    try
+    {
+      using var document = JsonDocument.Parse(body);
+
+      if (!document.RootElement.TryGetProperty(
+              "EventId",
+              out var eventIdProperty))
+      {
+        throw new PermanentMessageException(
+            "Payload não contém EventId.");
+      }
+
+      if (eventIdProperty.ValueKind != JsonValueKind.String ||
+          !Guid.TryParse(
+              eventIdProperty.GetString(),
+              out var eventId))
+      {
+        throw new PermanentMessageException(
+            "EventId do payload não é um GUID válido.");
+      }
+
+      if (eventId != messageId)
+      {
+        throw new PermanentMessageException(
+            "EventId do payload diverge do MessageId do RabbitMQ.");
+      }
+    }
+    catch (JsonException exception)
+    {
+      throw new PermanentMessageException(
+          "Payload JSON inválido.",
+          exception);
     }
   }
 
   private static Guid GetMessageId(
       BasicDeliverEventArgs args)
   {
-    var messageId =
-        args.BasicProperties.MessageId;
+    var messageId = args.BasicProperties.MessageId;
 
-    return Guid.TryParse(
-        messageId,
-        out var id)
+    return Guid.TryParse(messageId, out var id)
         ? id
         : Guid.Empty;
+  }
+
+  private static async Task RejectMessageAsync(
+      IChannel channel,
+      ulong deliveryTag)
+  {
+    if (!channel.IsOpen)
+      return;
+
+    await channel.BasicNackAsync(
+        deliveryTag,
+        multiple: false,
+        requeue: false,
+        cancellationToken: CancellationToken.None);
   }
 
   private async Task ConnectAsync(
@@ -220,16 +291,12 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       throw new InvalidOperationException(
           "Configure RABBITMQ_USER, RABBITMQ_PASSWORD, " +
-          "RABBITMQ_HOST e RABBITMQ_VHOST nas variáveis " +
-          "de ambiente.");
+          "RABBITMQ_HOST e RABBITMQ_VHOST nas variáveis de ambiente.");
     }
 
-    var port =
-        int.TryParse(
-            portValue,
-            out var parsedPort)
-            ? parsedPort
-            : 5672;
+    var port = int.TryParse(portValue, out var parsedPort)
+        ? parsedPort
+        : 5672;
 
     var factory = new ConnectionFactory
     {
@@ -239,24 +306,20 @@ public sealed class RabbitMqConsumer : BackgroundService
       Password = password,
       VirtualHost = virtualHost,
       AutomaticRecoveryEnabled = true,
-      NetworkRecoveryInterval =
-            TimeSpan.FromSeconds(10)
+      NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
     };
 
-    _connection =
-        await factory.CreateConnectionAsync(
-            cancellationToken);
+    _connection = await factory.CreateConnectionAsync(
+        cancellationToken);
 
-    var options =
-        new CreateChannelOptions(
-            publisherConfirmationsEnabled: false,
-            publisherConfirmationTrackingEnabled: false,
-            consumerDispatchConcurrency: 1);
+    var options = new CreateChannelOptions(
+        publisherConfirmationsEnabled: false,
+        publisherConfirmationTrackingEnabled: false,
+        consumerDispatchConcurrency: 1);
 
-    _channel =
-        await _connection.CreateChannelAsync(
-            options,
-            cancellationToken);
+    _channel = await _connection.CreateChannelAsync(
+        options,
+        cancellationToken);
 
     await _channel.QueueDeclareAsync(
         queue: QueueName,
@@ -273,27 +336,27 @@ public sealed class RabbitMqConsumer : BackgroundService
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-        "Conexão do Consumer estabelecida. " +
-        "Fila: {QueueName}.",
+        "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
         QueueName);
   }
 
   public override async Task StopAsync(
       CancellationToken cancellationToken)
   {
-    if (_channel is not null)
-    {
-      await _channel.CloseAsync(
-          cancellationToken);
-    }
+    await base.StopAsync(cancellationToken);
 
-    if (_connection is not null)
-    {
-      await _connection.CloseAsync(
-          cancellationToken);
-    }
+    if (_channel is not null && _channel.IsOpen)
+      await _channel.CloseAsync(cancellationToken);
 
-    await base.StopAsync(
-        cancellationToken);
+    if (_connection is not null && _connection.IsOpen)
+      await _connection.CloseAsync(cancellationToken);
+  }
+
+  public override void Dispose()
+  {
+    _channel?.Dispose();
+    _connection?.Dispose();
+
+    base.Dispose();
   }
 }

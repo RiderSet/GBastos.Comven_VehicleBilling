@@ -1,15 +1,15 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Operations;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
-using Npgsql;
 using Comven_VehicleBilling.Infrastructure.Outbox;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
 
@@ -24,8 +24,8 @@ public sealed class OperationRepository : IOperationRepository
   }
 
   public async Task<RefundOperationResult> RefundAsync(
-    Guid operationId,
-    CancellationToken cancellationToken = default)
+      Guid operationId,
+      CancellationToken cancellationToken = default)
   {
     if (operationId == Guid.Empty)
     {
@@ -129,10 +129,13 @@ public sealed class OperationRepository : IOperationRepository
         refundLedgerEntry,
         cancellationToken);
 
-    // Evento Outbox na mesma transação.
+    // Gera uma única identidade para o evento.
+    // O mesmo GUID será utilizado na Outbox e no payload.
+    var eventId = Guid.NewGuid();
+
     var eventPayload = JsonSerializer.Serialize(new
     {
-      EventId = Guid.NewGuid(),
+      EventId = eventId,
       OperationId = operation.Id,
       ExternalOperationId = operation.ExternalOperationId,
       CustomerId = operation.CustomerId,
@@ -142,6 +145,7 @@ public sealed class OperationRepository : IOperationRepository
     });
 
     var outboxMessage = new OutboxMessage(
+        eventId,
         "OperationRefunded.v1",
         operation.Id,
         eventPayload);
@@ -291,10 +295,13 @@ public sealed class OperationRepository : IOperationRepository
           operation,
           cancellationToken);
 
-      // Registra o evento na mesma transação da operação.
+      // Gera uma única identidade para o evento.
+      // O mesmo GUID será utilizado na Outbox e no payload.
+      var eventId = Guid.NewGuid();
+
       var eventPayload = JsonSerializer.Serialize(new
       {
-        EventId = Guid.NewGuid(),
+        EventId = eventId,
         OperationId = operation.Id,
         ExternalOperationId = command.ExternalOperationId,
         CustomerId = command.CustomerId,
@@ -305,6 +312,7 @@ public sealed class OperationRepository : IOperationRepository
       });
 
       var outboxMessage = new OutboxMessage(
+          eventId,
           "OperationCreated.v1",
           operation.Id,
           eventPayload);

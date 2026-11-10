@@ -21,14 +21,20 @@ public sealed class OutboxMessage
   }
 
   public OutboxMessage(
+      Guid id,
       string messageType,
       Guid? aggregateId,
       string payload)
   {
+    if (id == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador da mensagem não pode ser vazio.",
+          nameof(id));
+
     ArgumentException.ThrowIfNullOrWhiteSpace(messageType);
     ArgumentException.ThrowIfNullOrWhiteSpace(payload);
 
-    Id = Guid.NewGuid();
+    Id = id;
     MessageType = messageType;
     AggregateId = aggregateId;
     Payload = payload;

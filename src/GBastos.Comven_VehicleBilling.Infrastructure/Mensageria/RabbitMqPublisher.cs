@@ -74,13 +74,13 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
       _channel = null;
     }
 
-    if (_connection is not { IsOpen: true })
+if (_connection is not { IsOpen: true })
+{
+    if (_connection is not null)
     {
-      if (_connection is not null)
-      {
         await _connection.DisposeAsync();
         _connection = null;
-      }
+    }
 
       var user = Environment.GetEnvironmentVariable("RABBITMQ_USER");
       var password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
@@ -108,20 +108,6 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         AutomaticRecoveryEnabled = true,
         NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
       };
-
-      using var sha = System.Security.Cryptography.SHA256.Create();
-
-      var passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
-      var passwordHash = BitConverter.ToString(
-          sha.ComputeHash(passwordBytes)).Replace("-", "");
-
-      Console.WriteLine(
-          $"RABBITMQ_DIAG Host={factory.HostName} " +
-          $"Port={factory.Port} " +
-          $"User={factory.UserName} " +
-          $"VHost={factory.VirtualHost} " +
-          $"PasswordLength={password?.Length ?? 0} " +
-          $"PasswordFingerprint={passwordHash}");
 
       _connection = await factory.CreateConnectionAsync(
 
