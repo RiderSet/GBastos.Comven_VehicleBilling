@@ -1,4 +1,4 @@
-﻿namespace Comven_VehicleBilling.Infrastructure.Inbox;
+namespace Comven_VehicleBilling.Infrastructure.Inbox;
 
 public sealed class InboxMessage
 {
