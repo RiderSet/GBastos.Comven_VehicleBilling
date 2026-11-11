@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Infrastructure.Outbox;
+﻿using Comven_VehicleBilling.Infrastructure.Outbox;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -33,7 +33,8 @@ public sealed class OutboxPersistenceTests
   public async Task ShouldPersistAndRetrieveOutboxMessage()
   {
     var message = new OutboxMessage(
-    messageType: "IntegrationTest.MessageCreated",
+        id: Guid.NewGuid(),
+        messageType: "IntegrationTest.MessageCreated",
     aggregateId: Guid.NewGuid(),
     payload: """{"source":"integration-test"}""");
 
@@ -97,6 +98,7 @@ public sealed class OutboxPersistenceTests
 public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
 {
     var message = new OutboxMessage(
+        id: Guid.NewGuid(),
         messageType: "TestEvent",
         aggregateId: Guid.NewGuid(),
         payload: """{"operationId":"failure-lock-test"}""");
@@ -166,7 +168,8 @@ public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
 
     var messages = Enumerable.Range(0, messageCount)
         .Select(index => new OutboxMessage(
-            messageType: "IntegrationTest.ConcurrentReservation",
+        id: Guid.NewGuid(),
+        messageType: "IntegrationTest.ConcurrentReservation",
             aggregateId: Guid.NewGuid(),
             payload: JsonSerializer.Serialize(
                 new { source = "concurrency-test", index })))
@@ -196,7 +199,7 @@ public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
         await dbContext.SaveChangesAsync();
       }
 
-      // Cada chamada usa seu próprio DbContext e sua própria transação.
+      // Cada chamada usa seu prÃ³prio DbContext e sua prÃ³pria transaÃ§Ã£o.
       var tasks = Enumerable.Range(0, 2)
           .Select(async _ =>
           {
@@ -250,6 +253,7 @@ public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
   public async Task ShouldRejectProcessingWhenLockWasReplaced()
   {
     var message = new OutboxMessage(
+        id: Guid.NewGuid(),
         messageType: "IntegrationTest.StaleLock",
         aggregateId: Guid.NewGuid(),
         payload: """{"source":"stale-lock-test"}""");
@@ -295,7 +299,7 @@ public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
         Assert.Equal(1, affectedRows);
       }
 
-      // O worker antigo não deve conseguir concluir a mensagem.
+      // O worker antigo nÃ£o deve conseguir concluir a mensagem.
       await using (var workerContext = CreateDbContext())
       {
         var repository = new OutboxRepository(workerContext);
@@ -343,6 +347,7 @@ public async Task ShouldRejectFailureRegistrationWhenLockWasReplaced()
 public async Task ShouldRegisterFailureAndReleaseMessageForRetry()
 {
     var message = new OutboxMessage(
+        id: Guid.NewGuid(),
         messageType: "IntegrationTest.FailureRecovery",
         aggregateId: Guid.NewGuid(),
         payload: """{"source":"failure-recovery-test"}""");
@@ -350,11 +355,11 @@ public async Task ShouldRegisterFailureAndReleaseMessageForRetry()
     var lockId = Guid.NewGuid();
     var lockExpiry = DateTime.UtcNow.AddMinutes(5);
     var nextAttemptAt = DateTime.UtcNow.AddMinutes(2);
-    const string expectedError = "Falha simulada de publicação";
+    const string expectedError = "Falha simulada de publicaÃ§Ã£o";
 
     try
     {
-        // Persiste a mensagem com uma reserva válida.
+        // Persiste a mensagem com uma reserva vÃ¡lida.
         await using (var setupContext = CreateDbContext())
         {
             message.AcquireLock(lockId, lockExpiry);
@@ -411,6 +416,7 @@ public async Task ShouldRegisterFailureAndReleaseMessageForRetry()
 public async Task ShouldReserveMessageOnlyAfterRetryTime()
 {
     var message = new OutboxMessage(
+        id: Guid.NewGuid(),
         messageType: "IntegrationTest.RetryEligibility",
         aggregateId: Guid.NewGuid(),
         payload: """{"source":"retry-eligibility-test"}""");
@@ -419,7 +425,7 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
 
     try
     {
-        // Cria uma mensagem cujo reprocessamento está agendado
+        // Cria uma mensagem cujo reprocessamento estÃ¡ agendado
         // para o futuro.
         await using (var setupContext = CreateDbContext())
         {
@@ -435,7 +441,7 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
                         (DateTime?)nextAttemptAt));
         }
 
-        // Antes do horário agendado, a mensagem não pode
+        // Antes do horÃ¡rio agendado, a mensagem nÃ£o pode
         // ser reservada.
         await using (var earlyContext = CreateDbContext())
         {
@@ -462,8 +468,8 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
             Assert.Equal(1, affectedRows);
         }
 
-        // Depois do horário agendado, a mensagem deve voltar
-        // a ser elegível para reserva.
+        // Depois do horÃ¡rio agendado, a mensagem deve voltar
+        // a ser elegÃ­vel para reserva.
         await using (var retryContext = CreateDbContext())
         {
             var repository = new OutboxRepository(retryContext);
@@ -486,3 +492,4 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
     }
 }
 }
+
