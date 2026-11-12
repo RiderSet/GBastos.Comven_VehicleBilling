@@ -104,11 +104,11 @@ public sealed class OutboxRepository
   }
 
   public async Task<bool> RegisterFailureAsync(
-        Guid messageId,
-        Guid lockId,
-        string error,
-        DateTime nextAttemptAt,
-        CancellationToken cancellationToken = default)
+      Guid messageId,
+      Guid lockId,
+      string error,
+      DateTime nextAttemptAt,
+      CancellationToken cancellationToken = default)
   {
     ArgumentException.ThrowIfNullOrWhiteSpace(error);
 

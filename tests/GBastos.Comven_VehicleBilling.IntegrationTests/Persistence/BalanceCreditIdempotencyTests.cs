@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Comven_VehicleBilling.IntegrationTests.Persistence;
 
+[Collection("PostgreSQL integration tests")]
 public sealed class BalanceCreditIdempotencyTests
 {
     private const decimal InitialBalance = 120.01m;
@@ -491,5 +492,6 @@ public sealed class BalanceCreditIdempotencyTests
         }
     }
 }
+
 
 

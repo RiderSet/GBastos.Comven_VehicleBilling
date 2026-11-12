@@ -5,6 +5,7 @@ using System.Text.Json;
 
 namespace Comven_VehicleBilling.IntegrationTests.Persistence;
 
+[Collection("PostgreSQL integration tests")]
 public sealed class OutboxPersistenceTests
 {
   private static VehicleBillingDbContext CreateDbContext()
@@ -492,4 +493,5 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
     }
 }
 }
+
 

@@ -7,128 +7,142 @@ namespace Comven_VehicleBilling.Infrastructure.Mensageria;
 
 public sealed class RabbitMqPublisher : IAsyncDisposable
 {
-    private const string QueueName = "vehicle-billing-events";
+  private const string QueueName = "vehicle-billing-events";
 
-    private readonly ILogger<RabbitMqPublisher> _logger;
-    private readonly SemaphoreSlim _publishLock = new(1, 1);
+  private readonly ILogger<RabbitMqPublisher> _logger;
+  private readonly SemaphoreSlim _publishLock = new(1, 1);
 
-    private IConnection? _connection;
-    private IChannel? _channel;
+  private IConnection? _connection;
+  private IChannel? _channel;
 
-    public RabbitMqPublisher(ILogger<RabbitMqPublisher> logger)
+  public RabbitMqPublisher(ILogger<RabbitMqPublisher> logger)
+  {
+    _logger = logger;
+  }
+
+  public async Task PublishAsync(
+      OutboxMessage message,
+      CancellationToken cancellationToken = default)
+  {
+    ArgumentNullException.ThrowIfNull(message);
+
+    await _publishLock.WaitAsync(cancellationToken);
+
+    try
     {
-        _logger = logger;
+      await EnsureChannelAsync(cancellationToken);
+
+      var properties = new BasicProperties
+      {
+        MessageId = message.Id.ToString(),
+        Type = message.MessageType,
+        ContentType = "application/json",
+        Persistent = true
+      };
+
+      var body = Encoding.UTF8.GetBytes(message.Payload);
+
+      await _channel!.BasicPublishAsync(
+          exchange: string.Empty,
+          routingKey: QueueName,
+          mandatory: true,
+          basicProperties: properties,
+          body: body,
+          cancellationToken: cancellationToken);
+
+      _logger.LogInformation(
+          "Mensagem {MessageId} publicada e confirmada pelo RabbitMQ. " +
+          "Fila: {QueueName}.",
+          message.Id,
+          QueueName);
+    }
+    catch (OperationCanceledException)
+        when (cancellationToken.IsCancellationRequested)
+    {
+      throw;
+    }
+    catch (Exception exception)
+    {
+      _logger.LogError(
+          exception,
+          "Falha ao publicar a mensagem {MessageId}.",
+          message.Id);
+
+      throw;
+    }
+    finally
+    {
+      _publishLock.Release();
+    }
+  }
+
+  private async Task EnsureChannelAsync(
+      CancellationToken cancellationToken)
+  {
+    if (_connection is { IsOpen: true } &&
+        _channel is { IsOpen: true })
+    {
+      return;
     }
 
-    public async Task PublishAsync(
-        OutboxMessage message,
-        CancellationToken cancellationToken = default)
+    if (_channel is not null)
     {
-        await _publishLock.WaitAsync(cancellationToken);
-
-        try
-        {
-            await EnsureChannelAsync(cancellationToken);
-
-            var properties = new BasicProperties
-            {
-                MessageId = message.Id.ToString(),
-                Type = message.MessageType,
-                ContentType = "application/json",
-                Persistent = true
-            };
-
-            var body = Encoding.UTF8.GetBytes(message.Payload);
-
-            await _channel!.BasicPublishAsync(
-                exchange: string.Empty,
-                routingKey: QueueName,
-                mandatory: true,
-                basicProperties: properties,
-                body: body,
-                cancellationToken: cancellationToken);
-
-            _logger.LogInformation(
-                "Mensagem {MessageId} publicada na fila {QueueName}.",
-                message.Id,
-                QueueName);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(
-                exception,
-                "Falha ao publicar a mensagem {MessageId}.",
-                message.Id);
-
-            throw;
-        }
-        finally
-        {
-            _publishLock.Release();
-        }
+      await _channel.DisposeAsync();
+      _channel = null;
     }
 
-    private async Task EnsureChannelAsync(
-        CancellationToken cancellationToken)
+    if (_connection is not { IsOpen: true })
     {
-        if (_connection is { IsOpen: true } &&
-            _channel is { IsOpen: true })
-        {
-            return;
-        }
+      if (_connection is not null)
+      {
+        await _connection.DisposeAsync();
+        _connection = null;
+      }
 
-        if (_channel is not null)
-        {
-            await _channel.DisposeAsync();
-            _channel = null;
-        }
+      var user = Environment.GetEnvironmentVariable("RABBITMQ_USER");
+      var password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
+      var virtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST");
 
-        if (_connection is not { IsOpen: true })
-        {
-            if (_connection is not null)
-            {
-                await _connection.DisposeAsync();
-                _connection = null;
-            }
+      if (string.IsNullOrWhiteSpace(user) ||
+          string.IsNullOrWhiteSpace(password) ||
+          string.IsNullOrWhiteSpace(virtualHost))
+      {
+        throw new InvalidOperationException(
+            "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
+            "e RABBITMQ_VHOST nas variáveis de ambiente.");
+      }
 
-            var user = Environment.GetEnvironmentVariable("RABBITMQ_USER");
-            var password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
-            var virtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST");
+      var factory = new ConnectionFactory
+      {
+        HostName =
+              Environment.GetEnvironmentVariable("RABBITMQ_HOST")
+              ?? "localhost",
 
-            if (string.IsNullOrWhiteSpace(user) ||
-                string.IsNullOrWhiteSpace(password) ||
-                string.IsNullOrWhiteSpace(virtualHost))
-            {
-                throw new InvalidOperationException(
-                    "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
-                    "e RABBITMQ_VHOST nas variáveis de ambiente.");
-            }
+        Port = int.TryParse(
+              Environment.GetEnvironmentVariable("RABBITMQ_PORT"),
+              out var port)
+              ? port
+              : 5672,
 
-            var factory = new ConnectionFactory
-            {
-                HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST")
-                    ?? "localhost",
-                Port = int.TryParse(
-                    Environment.GetEnvironmentVariable("RABBITMQ_PORT"),
-                    out var port) ? port : 5672,
-                UserName = user,
-                Password = password,
-                VirtualHost = virtualHost,
-                AutomaticRecoveryEnabled = true,
-                NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
-            };
+        UserName = user,
+        Password = password,
+        VirtualHost = virtualHost,
 
-            _connection = await factory.CreateConnectionAsync(
-                cancellationToken);
-        }
+        AutomaticRecoveryEnabled = true,
+        NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
+      };
 
-        var options = new CreateChannelOptions(
-            publisherConfirmationsEnabled: true,
-            publisherConfirmationTrackingEnabled: true);
+      _connection = await factory.CreateConnectionAsync(
+          cancellationToken);
+    }
 
-        _channel = await _connection!.CreateChannelAsync(
-            options,
-            cancellationToken);
+    var options = new CreateChannelOptions(
+        publisherConfirmationsEnabled: true,
+        publisherConfirmationTrackingEnabled: true);
+
+    _channel = await _connection!.CreateChannelAsync(
+        options,
+        cancellationToken);
 
     await _channel.QueueDeclareAsync(
         queue: QueueName,
@@ -142,22 +156,22 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-            "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
-            QueueName);
-    }
+        "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
+        QueueName);
+  }
 
-    public async ValueTask DisposeAsync()
+  public async ValueTask DisposeAsync()
+  {
+    if (_channel is not null)
     {
-        if (_channel is not null)
-        {
-            await _channel.DisposeAsync();
-        }
-
-        if (_connection is not null)
-        {
-            await _connection.DisposeAsync();
-        }
-
-        _publishLock.Dispose();
+      await _channel.DisposeAsync();
     }
+
+    if (_connection is not null)
+    {
+      await _connection.DisposeAsync();
+    }
+
+    _publishLock.Dispose();
+  }
 }

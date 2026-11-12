@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Comven_VehicleBilling.IntegrationTests.Persistence;
 
+[Collection("PostgreSQL integration tests")]
 public sealed class InboxPersistenceTests
 {
     private static VehicleBillingDbContext CreateDbContext()
@@ -100,3 +101,4 @@ public sealed class InboxPersistenceTests
         }
     }
 }
+

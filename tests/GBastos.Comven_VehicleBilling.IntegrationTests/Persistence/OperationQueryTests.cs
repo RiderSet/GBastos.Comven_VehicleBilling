@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Operations;
+﻿using Comven_VehicleBilling.Application.Operations;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Comven_VehicleBilling.IntegrationTests.Persistence;
 
+[Collection("PostgreSQL integration tests")]
 public sealed class OperationQueryTests
 {
   private static VehicleBillingDbContext CreateDbContext()
@@ -19,7 +20,7 @@ public sealed class OperationQueryTests
     if (string.IsNullOrWhiteSpace(connectionString))
     {
       throw new InvalidOperationException(
-          "A variável VEHICLE_BILLING_TEST_CONNECTION_STRING não foi definida.");
+          "A variÃ¡vel VEHICLE_BILLING_TEST_CONNECTION_STRING nÃ£o foi definida.");
     }
 
     var options = new DbContextOptionsBuilder<VehicleBillingDbContext>()
@@ -387,3 +388,4 @@ public sealed class OperationQueryTests
     }
   }
 }
+
