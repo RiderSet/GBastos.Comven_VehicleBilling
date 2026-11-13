@@ -35,29 +35,19 @@ internal sealed class VehicleBillingApiClient
       string name,
       string document,
       string email,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      string plan = "Prepaid")
   {
     var request = new
     {
       Name = name,
       Document = document,
-      Email = email
+      Email = email,
+      Plan = plan
     };
 
     return _httpClient.PostAsJsonAsync(
         "api/customers",
-        request,
-        cancellationToken);
-  }
-
-  public Task<HttpResponseMessage> CreateOperationAsync(
-      CreateOperationRequest request,
-      CancellationToken cancellationToken = default)
-  {
-    ArgumentNullException.ThrowIfNull(request);
-
-    return _httpClient.PostAsJsonAsync(
-        "api/operations",
         request,
         cancellationToken);
   }
@@ -72,7 +62,7 @@ internal sealed class VehicleBillingApiClient
 
     if (customerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente Ã© obrigatÃ³rio.",
+          "O identificador do cliente ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(customerId));
 
     if (amount <= 0)
@@ -92,6 +82,37 @@ internal sealed class VehicleBillingApiClient
         cancellationToken);
   }
 
+  public Task<HttpResponseMessage> CreateOperationAsync(
+      CreateOperationRequest request,
+      CancellationToken cancellationToken = default)
+  {
+    ArgumentNullException.ThrowIfNull(request);
+
+    if (request.ExternalOperationId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador externo da operação é obrigatório.",
+          nameof(request));
+
+    if (request.CustomerId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador do cliente é obrigatório.",
+          nameof(request));
+
+    if (string.IsNullOrWhiteSpace(request.OperationType))
+      throw new ArgumentException(
+          "O tipo da operação é obrigatório.",
+          nameof(request));
+
+    if (request.Amount <= 0)
+      throw new ArgumentOutOfRangeException(
+          nameof(request),
+          "O valor deve ser maior que zero.");
+
+    return _httpClient.PostAsJsonAsync(
+        "api/operations",
+        request,
+        cancellationToken);
+  }
   public Task<HttpResponseMessage> GetOperationsAsync(
       Guid? customerId = null,
       int page = 1,
@@ -104,7 +125,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId.HasValue && customerId.Value == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente Ã© invÃ¡lido.",
+          "O identificador do cliente ÃƒÂ© invÃƒÂ¡lido.",
           nameof(customerId));
 
     if (page < 1)
@@ -147,7 +168,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
+          "O identificador da operaÃƒÂ§ÃƒÂ£o ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(operationId));
 
     return _httpClient.GetAsync(
@@ -161,7 +182,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
+          "O identificador da operaÃƒÂ§ÃƒÂ£o ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(operationId));
 
     return _httpClient.PostAsync(
@@ -203,17 +224,17 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente é obrigatório.",
+          "O identificador do cliente Ã© obrigatÃ³rio.",
           nameof(customerId));
 
     if (referenceDate == DateOnly.MinValue)
       throw new ArgumentException(
-          "A data de referência é obrigatória.",
+          "A data de referÃªncia Ã© obrigatÃ³ria.",
           nameof(referenceDate));
 
     if (generationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da geração é obrigatório.",
+          "O identificador da geraÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(generationId));
 
     var request = new
@@ -235,7 +256,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (invoiceId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da fatura é obrigatório.",
+          "O identificador da fatura Ã© obrigatÃ³rio.",
           nameof(invoiceId));
 
     return _httpClient.GetAsync(
@@ -249,7 +270,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId.HasValue && customerId.Value == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente é inválido.",
+          "O identificador do cliente Ã© invÃ¡lido.",
           nameof(customerId));
 
     var url = customerId.HasValue
@@ -258,3 +279,5 @@ internal sealed class VehicleBillingApiClient
 
     return _httpClient.GetAsync(url, cancellationToken);
   }}
+
+

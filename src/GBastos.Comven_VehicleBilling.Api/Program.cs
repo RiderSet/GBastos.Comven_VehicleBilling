@@ -167,7 +167,7 @@ app.MapGet(
     })
     .WithName("DatabaseHealthCheck")
     .WithTags("Health");
-
+ 
 app.MapCustomerEndpoints();
 app.MapOperationEndpoints();
 app.MapInvoiceEndpoints();

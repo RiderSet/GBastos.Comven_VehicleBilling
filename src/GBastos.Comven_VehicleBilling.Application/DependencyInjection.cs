@@ -18,9 +18,9 @@ public static class DependencyInjection
         services.AddScoped<StatementService>();
         services.AddScoped<InvoiceService>();
         services.AddScoped<BalanceCreditService>();
+
         services.AddValidatorsFromAssemblyContaining<OperationService>();
 
-
-    return services;
+        return services;
     }
 }

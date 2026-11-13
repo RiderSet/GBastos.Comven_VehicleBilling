@@ -383,18 +383,18 @@ public async Task<InvoiceDto?> GetByIdAsync(
         : Map(invoice);
 }
 
-public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
-    Guid? customerId = null,
-    CancellationToken cancellationToken = default)
-{
+  public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
+      Guid? customerId = null,
+      CancellationToken cancellationToken = default)
+  {
     var query = _dbContext.Invoices
         .AsNoTracking()
         .AsQueryable();
 
     if (customerId.HasValue)
     {
-        query = query.Where(
-            invoice => invoice.CustomerId == customerId.Value);
+      query = query.Where(
+          invoice => invoice.CustomerId == customerId.Value);
     }
 
     var invoices = await query
@@ -404,9 +404,9 @@ public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
     return invoices
         .Select(Map)
         .ToList();
-}
+  }
 
-private static InvoiceDto Map(Invoice invoice)
+  private static InvoiceDto Map(Invoice invoice)
     => new(
         invoice.Id,
         invoice.CustomerId,
