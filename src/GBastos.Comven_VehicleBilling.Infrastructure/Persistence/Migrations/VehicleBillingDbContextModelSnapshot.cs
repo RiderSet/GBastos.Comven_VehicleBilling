@@ -114,6 +114,15 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid?>("OriginalInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_invoice_id");
+
                     b.Property<DateOnly>("PeriodEnd")
                         .HasColumnType("date")
                         .HasColumnName("period_end");
@@ -133,6 +142,11 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("OriginalInvoiceId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoices_original_idempotency")
+                        .HasFilter("original_invoice_id IS NOT NULL AND idempotency_key IS NOT NULL");
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_invoices_status_created_at");
@@ -379,6 +393,12 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_invoices_original_invoice");
 
                     b.Navigation("Customer");
                 });

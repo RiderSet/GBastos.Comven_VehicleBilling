@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Api.Contracts.Invoices;
+using Comven_VehicleBilling.Api.Contracts.Invoices;
 using Comven_VehicleBilling.Application.Invoices;
 
 namespace Comven_VehicleBilling.Api.Endpoints;
@@ -14,6 +14,12 @@ public static class InvoiceEndpoints
         group.MapPost("/", CreateInvoice)
             .WithName("CreateInvoice")
             .WithSummary("Gera uma fatura para um cliente pós-pago")
+            .Produces<InvoiceResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/supplementary", CreateSupplementaryInvoice)
+            .WithName("CreateSupplementaryInvoice")
+            .WithSummary("Gera uma fatura complementar a partir de uma fatura original")
             .Produces<InvoiceResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
@@ -79,6 +85,60 @@ public static class InvoiceEndpoints
         }
     }
 
+    private static async Task<IResult> CreateSupplementaryInvoice(
+        CreateSupplementaryInvoiceRequest request,
+        InvoiceService service,
+        CancellationToken cancellationToken)
+    {
+        if (request.CustomerId == Guid.Empty)
+            return Results.Problem(
+                title: "Cliente inválido",
+                detail: "Informe um identificador válido.",
+                statusCode: StatusCodes.Status400BadRequest);
+
+        if (request.OriginalInvoiceId == Guid.Empty)
+            return Results.Problem(
+                title: "Fatura original inválida",
+                detail: "Informe um identificador válido.",
+                statusCode: StatusCodes.Status400BadRequest);
+
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            return Results.Problem(
+                title: "Chave de idempotência inválida",
+                detail: "Informe uma chave de idempotência.",
+                statusCode: StatusCodes.Status400BadRequest);
+
+        try
+        {
+            var invoice = await service.CreateSupplementaryAsync(
+                new CreateSupplementaryInvoiceCommand(
+                    request.CustomerId,
+                    request.OriginalInvoiceId,
+                    request.IdempotencyKey),
+                cancellationToken);
+
+            var response = ToResponse(invoice);
+
+            return Results.Created(
+                $"/api/invoices/{invoice.Id}",
+                response);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.Problem(
+                title: "Dados da fatura complementar inválidos",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.Problem(
+                title: "Não foi possível gerar a fatura complementar",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
     private static async Task<IResult> GetInvoiceById(
         Guid id,
         InvoiceService service,
@@ -121,5 +181,7 @@ public static class InvoiceEndpoints
             invoice.PeriodEnd,
             invoice.Amount,
             invoice.Status,
-            invoice.CreatedAt);
+            invoice.CreatedAt,
+            invoice.OriginalInvoiceId,
+            invoice.IsSupplementary);
 }

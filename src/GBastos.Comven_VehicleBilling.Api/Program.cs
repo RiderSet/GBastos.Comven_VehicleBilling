@@ -2,6 +2,7 @@ using Comven_VehicleBilling.Api.Endpoints;
 using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 
 // Localiza o .env na raiz do repositório.
 static string? FindEnvFile()
@@ -133,24 +134,36 @@ app.MapGet(
     "/health/database",
     async (
         VehicleBillingDbContext dbContext,
+        ILogger<Program> logger,
         CancellationToken cancellationToken) =>
     {
-        var canConnect = await dbContext.Database
-            .CanConnectAsync(cancellationToken);
+      try
+      {
+        await dbContext.Database.OpenConnectionAsync(
+            cancellationToken);
 
-        if (!canConnect)
-        {
-            return Results.Problem(
-                statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Banco de dados indisponÃƒÂ­vel");
-        }
+        await dbContext.Database.CloseConnectionAsync();
 
         return Results.Ok(new
         {
-            status = "Healthy",
-            database = "PostgreSQL",
-            timestamp = DateTimeOffset.UtcNow
+          status = "Healthy",
+          database = "PostgreSQL",
+          timestamp = DateTimeOffset.UtcNow
         });
+      }
+      catch (Exception ex)
+      {
+        logger.LogError(
+            ex,
+            "Falha ao conectar ao PostgreSQL no health check.");
+
+        return Results.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: "Banco de dados indisponível",
+            detail: app.Environment.IsDevelopment()
+                ? ex.ToString()
+                : "Não foi possível conectar ao banco de dados.");
+      }
     })
     .WithName("DatabaseHealthCheck")
     .WithTags("Health");

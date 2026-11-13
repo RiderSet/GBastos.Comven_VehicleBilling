@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net.Http.Json;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
 using Comven_VehicleBilling.MonolithSimulator.Models.Responses;
@@ -198,6 +198,7 @@ internal sealed class VehicleBillingApiClient
   public Task<HttpResponseMessage> CreateInvoiceAsync(
       Guid customerId,
       DateOnly referenceDate,
+      Guid generationId,
       CancellationToken cancellationToken = default)
   {
     if (customerId == Guid.Empty)
@@ -210,10 +211,16 @@ internal sealed class VehicleBillingApiClient
           "A data de referência é obrigatória.",
           nameof(referenceDate));
 
+    if (generationId == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador da geração é obrigatório.",
+          nameof(generationId));
+
     var request = new
     {
       CustomerId = customerId,
-      ReferenceDate = referenceDate
+      ReferenceDate = referenceDate,
+      GenerationId = generationId
     };
 
     return _httpClient.PostAsJsonAsync(

@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Domain.Enums;
+using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
 
 namespace Comven_VehicleBilling.Domain.Entities;
@@ -15,6 +15,10 @@ public sealed class Invoice
 
     public DateOnly PeriodEnd { get; private set; }
 
+    public Guid? OriginalInvoiceId { get; private set; }
+
+    public string? IdempotencyKey { get; private set; }
+
     public Money Total { get; private set; } = Money.Zero;
 
     public InvoiceStatus Status { get; private set; }
@@ -26,6 +30,8 @@ public sealed class Invoice
     public IReadOnlyCollection<InvoiceItem> Items
         => _items.AsReadOnly();
 
+    public bool IsSupplementary => OriginalInvoiceId.HasValue;
+
     private Invoice()
     {
     }
@@ -35,7 +41,9 @@ public sealed class Invoice
         Guid customerId,
         DateOnly periodStart,
         DateOnly periodEnd,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        Guid? originalInvoiceId = null,
+        string? idempotencyKey = null)
     {
         if (id == Guid.Empty)
             throw new ArgumentException(
@@ -52,10 +60,35 @@ public sealed class Invoice
                 "Invoice period end must be greater than period start.",
                 nameof(periodEnd));
 
+        if (originalInvoiceId == Guid.Empty)
+            throw new ArgumentException(
+                "Original invoice id cannot be empty.",
+                nameof(originalInvoiceId));
+
+        if (originalInvoiceId == id)
+            throw new ArgumentException(
+                "An invoice cannot reference itself as the original invoice.",
+                nameof(originalInvoiceId));
+
+        if (originalInvoiceId.HasValue &&
+            string.IsNullOrWhiteSpace(idempotencyKey))
+            throw new ArgumentException(
+                "Supplementary invoices require an idempotency key.",
+                nameof(idempotencyKey));
+
+        if (idempotencyKey?.Length > 200)
+            throw new ArgumentException(
+                "Idempotency key cannot exceed 200 characters.",
+                nameof(idempotencyKey));
+
         Id = id;
         CustomerId = customerId;
         PeriodStart = periodStart;
         PeriodEnd = periodEnd;
+        OriginalInvoiceId = originalInvoiceId;
+        IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey)
+            ? null
+            : idempotencyKey.Trim();
         Total = Money.Zero;
         Status = InvoiceStatus.Open;
         CreatedAt = createdAt;

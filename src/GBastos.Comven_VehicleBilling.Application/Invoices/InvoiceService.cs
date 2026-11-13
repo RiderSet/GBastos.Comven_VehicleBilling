@@ -21,16 +21,46 @@ public sealed class InvoiceService
 
         if (command.CustomerId == Guid.Empty)
             throw new ArgumentException(
-                "O identificador do cliente é inválido.",
+                "O identificador do cliente Ã© invÃ¡lido.",
                 nameof(command));
 
         if (command.ReferenceDate == DateOnly.MinValue)
             throw new ArgumentException(
-                "A data de referência é inválida.",
+                "A data de referÃªncia Ã© invÃ¡lida.",
                 nameof(command));
 
         return await _repository.CreateAsync(
             command, cancellationToken);
+    }
+
+    public async Task<InvoiceDto> CreateSupplementaryAsync(
+        CreateSupplementaryInvoiceCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (command.CustomerId == Guid.Empty)
+            throw new ArgumentException(
+                "O identificador do cliente é inválido.",
+                nameof(command));
+
+        if (command.OriginalInvoiceId == Guid.Empty)
+            throw new ArgumentException(
+                "O identificador da fatura original é inválido.",
+                nameof(command));
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            command.IdempotencyKey);
+
+        if (command.IdempotencyKey.Trim().Length > 200)
+            throw new ArgumentException(
+                "A chave de idempotência deve ter no máximo 200 caracteres.",
+                nameof(command));
+
+        return await _repository.CreateSupplementaryAsync(
+            command,
+            cancellationToken);
     }
 
   public async Task<InvoiceDto?> GetByIdAsync(
@@ -41,7 +71,7 @@ public sealed class InvoiceService
 
     if (id == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da fatura é inválido.",
+          "O identificador da fatura Ã© invÃ¡lido.",
           nameof(id));
 
     return await _repository.GetByIdAsync(
@@ -56,7 +86,7 @@ public sealed class InvoiceService
 
         if (customerId == Guid.Empty)
             throw new ArgumentException(
-                "O identificador do cliente é inválido.",
+                "O identificador do cliente Ã© invÃ¡lido.",
                 nameof(customerId));
 
         return _repository.GetAllAsync(

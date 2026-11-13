@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Application.Invoices;
+using Comven_VehicleBilling.Application.Invoices;
 
 namespace Comven_VehicleBilling.Application.Abstractions.Persistence;
 
@@ -6,6 +6,10 @@ public interface IInvoiceRepository
 {
     Task<InvoiceDto> CreateAsync(
         CreateInvoiceCommand command,
+        CancellationToken cancellationToken = default);
+
+    Task<InvoiceDto> CreateSupplementaryAsync(
+        CreateSupplementaryInvoiceCommand command,
         CancellationToken cancellationToken = default);
 
     Task<InvoiceDto?> GetByIdAsync(

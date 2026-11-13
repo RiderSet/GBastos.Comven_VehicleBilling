@@ -1,4 +1,4 @@
-﻿namespace Comven_VehicleBilling.Application.Invoices;
+namespace Comven_VehicleBilling.Application.Invoices;
 
 public sealed record InvoiceDto(
     Guid Id,
@@ -7,4 +7,8 @@ public sealed record InvoiceDto(
     DateOnly PeriodEnd,
     decimal Amount,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? OriginalInvoiceId)
+{
+  public bool IsSupplementary => OriginalInvoiceId.HasValue;
+}
