@@ -8,17 +8,23 @@ public sealed class Invoice
     private readonly List<InvoiceItem> _items = [];
 
     public Guid Id { get; private set; }
+
     public Guid CustomerId { get; private set; }
+
     public DateOnly PeriodStart { get; private set; }
+
     public DateOnly PeriodEnd { get; private set; }
+
     public Money Total { get; private set; } = Money.Zero;
+
     public InvoiceStatus Status { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public Customer Customer { get; private set; } = null!;
 
-    public IReadOnlyCollection<InvoiceItem> Items =>
-        _items.AsReadOnly();
+    public IReadOnlyCollection<InvoiceItem> Items
+        => _items.AsReadOnly();
 
     private Invoice()
     {
@@ -33,15 +39,18 @@ public sealed class Invoice
     {
         if (id == Guid.Empty)
             throw new ArgumentException(
-                "O ID da fatura é obrigatório.", nameof(id));
+                "Invoice id cannot be empty.",
+                nameof(id));
 
         if (customerId == Guid.Empty)
             throw new ArgumentException(
-                "O ID do cliente é obrigatório.", nameof(customerId));
+                "Customer id cannot be empty.",
+                nameof(customerId));
 
-        if (periodStart >= periodEnd)
+        if (periodEnd <= periodStart)
             throw new ArgumentException(
-                "O início do período deve ser anterior ao fim do período.");
+                "Invoice period end must be greater than period start.",
+                nameof(periodEnd));
 
         Id = id;
         CustomerId = customerId;
@@ -58,24 +67,22 @@ public sealed class Invoice
 
         if (Status != InvoiceStatus.Open)
             throw new InvalidOperationException(
-                "Só é possível adicionar itens a uma fatura aberta.");
+                "Items can only be added to an open invoice.");
 
         if (item.InvoiceId != Id)
             throw new InvalidOperationException(
-                "O item pertence a outra fatura.");
+                "Invoice item does not belong to this invoice.");
 
-        if (!item.Amount.IsPositive)
+        if (item.Amount.Amount <= 0)
             throw new InvalidOperationException(
-                "O valor do item deve ser maior que zero.");
+                "Invoice item amount must be greater than zero.");
 
-        if (_items.Any(existing =>
-                existing.OperationId == item.OperationId))
-        {
+        if (_items.Any(x => x.OperationId == item.OperationId))
             throw new InvalidOperationException(
-                "Esta operação já foi adicionada à fatura.");
-        }
+                "The operation is already included in this invoice.");
 
         _items.Add(item);
+
         RecalculateTotal();
     }
 
@@ -83,15 +90,15 @@ public sealed class Invoice
     {
         if (Status != InvoiceStatus.Open)
             throw new InvalidOperationException(
-                "Somente uma fatura aberta pode ser finalizada.");
+                "Only open invoices can be finalized.");
 
         if (_items.Count == 0)
             throw new InvalidOperationException(
-                "Não é possível finalizar uma fatura sem itens.");
+                "An invoice must contain at least one item.");
 
-        if (!Total.IsPositive)
+        if (Total.Amount <= 0)
             throw new InvalidOperationException(
-                "O total da fatura deve ser maior que zero.");
+                "Invoice total must be greater than zero.");
 
         Status = InvoiceStatus.PaymentPending;
     }
@@ -100,19 +107,19 @@ public sealed class Invoice
     {
         if (Status != InvoiceStatus.PaymentPending)
             throw new InvalidOperationException(
-                "Somente uma fatura pendente pode iniciar o pagamento.");
+                "Only invoices pending payment can start payment.");
 
         Status = InvoiceStatus.PaymentProcessing;
     }
 
     public void MarkPaid()
     {
-        if (Status is not InvoiceStatus.PaymentProcessing
-            and not InvoiceStatus.PaymentUnknown
-            and not InvoiceStatus.PaymentPending)
+        if (Status != InvoiceStatus.PaymentProcessing
+            && Status != InvoiceStatus.PaymentUnknown
+            && Status != InvoiceStatus.PaymentPending)
         {
             throw new InvalidOperationException(
-                "A fatura não pode ser marcada como paga a partir do estado atual.");
+                "Invoice cannot be marked as paid from its current status.");
         }
 
         Status = InvoiceStatus.Paid;
@@ -120,12 +127,12 @@ public sealed class Invoice
 
     public void MarkPaymentFailed()
     {
-        if (Status is not InvoiceStatus.PaymentProcessing
-            and not InvoiceStatus.PaymentUnknown
-            and not InvoiceStatus.PaymentPending)
+        if (Status != InvoiceStatus.PaymentProcessing
+            && Status != InvoiceStatus.PaymentUnknown
+            && Status != InvoiceStatus.PaymentPending)
         {
             throw new InvalidOperationException(
-                "A fatura não pode ser marcada como falha a partir do estado atual.");
+                "Invoice payment cannot be marked as failed from its current status.");
         }
 
         Status = InvoiceStatus.PaymentFailed;
@@ -135,7 +142,7 @@ public sealed class Invoice
     {
         if (Status != InvoiceStatus.PaymentUnknown)
             throw new InvalidOperationException(
-                "Somente pagamentos com resultado desconhecido exigem reconciliação.");
+                "Reconciliation is only required for invoices with unknown payment status.");
     }
 
     private void RecalculateTotal()

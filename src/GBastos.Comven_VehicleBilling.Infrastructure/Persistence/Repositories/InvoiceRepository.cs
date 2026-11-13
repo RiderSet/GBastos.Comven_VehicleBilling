@@ -1,7 +1,11 @@
-﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using System.Text.Json;
+using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
+using Comven_VehicleBilling.Domain.Rules;
+using Comven_VehicleBilling.Domain.ValueObjects;
+using Comven_VehicleBilling.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
@@ -12,8 +16,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
     public InvoiceRepository(VehicleBillingDbContext dbContext)
     {
-        _dbContext = dbContext
-            ?? throw new ArgumentNullException(nameof(dbContext));
+        _dbContext = dbContext;
     }
 
     public async Task<InvoiceDto> CreateAsync(
@@ -22,36 +25,17 @@ public sealed class InvoiceRepository : IInvoiceRepository
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var periodStart = new DateOnly(
+        if (command.CustomerId == Guid.Empty)
+            throw new ArgumentException(
+                "CustomerId cannot be empty.",
+                nameof(command.CustomerId));
+
+        var billingPeriod = BillingPeriod.ForMonth(
             command.ReferenceDate.Year,
-            command.ReferenceDate.Month,
-            1);
+            command.ReferenceDate.Month);
 
-        var periodEnd = periodStart.AddMonths(1);
-
-        var customer = await _dbContext.Customers
-            .FirstOrDefaultAsync(
-                c => c.Id == command.CustomerId,
-                cancellationToken);
-
-        if (customer is null)
-            throw new InvalidOperationException(
-                "O cliente informado não foi encontrado.");
-
-        if (customer.Plan != CustomerPlan.Postpaid)
-            throw new InvalidOperationException(
-                "Apenas clientes pós-pagos podem receber faturas.");
-
-        var existing = await _dbContext.Invoices
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                i => i.CustomerId == command.CustomerId
-                    && i.PeriodStart == periodStart
-                    && i.PeriodEnd == periodEnd,
-                cancellationToken);
-
-        if (existing is not null)
-            return Map(existing);
+        var periodStart = billingPeriod.StartDate;
+        var periodEnd = billingPeriod.EndDateExclusive;
 
         await using var transaction =
             await _dbContext.Database.BeginTransactionAsync(
@@ -59,18 +43,62 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
         try
         {
+            var customer = await _dbContext.Customers
+                .FromSqlInterpolated(
+                    $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (customer is null)
+                throw new InvalidOperationException(
+                    "Customer not found.");
+
+            if (customer.Plan != CustomerPlan.Postpaid)
+                throw new InvalidOperationException(
+                    "Invoices can only be generated for postpaid customers.");
+
+            var periodStartUtc = new DateTimeOffset(
+                periodStart.ToDateTime(TimeOnly.MinValue),
+                TimeSpan.Zero);
+
+            var periodEndUtc = new DateTimeOffset(
+                periodEnd.ToDateTime(TimeOnly.MinValue),
+                TimeSpan.Zero);
+
             var operations = await _dbContext.Operations
-                .Where(o =>
-                    o.CustomerId == command.CustomerId &&
-                    o.Status == OperationStatus.AwaitingInvoice &&
-                    o.CreatedAt >= new DateTimeOffset(
-                        periodStart.ToDateTime(TimeOnly.MinValue),
-                        TimeSpan.Zero) &&
-                    o.CreatedAt < new DateTimeOffset(
-                        periodEnd.ToDateTime(TimeOnly.MinValue),
-                        TimeSpan.Zero))
-                .OrderBy(o => o.CreatedAt)
+                .Where(operation =>
+                    operation.CustomerId == command.CustomerId
+                    && operation.Status == OperationStatus.AwaitingInvoice
+                    && operation.CreatedAt >= periodStartUtc
+                    && operation.CreatedAt < periodEndUtc)
+                .OrderBy(operation => operation.CreatedAt)
+                .ThenBy(operation => operation.Id)
                 .ToListAsync(cancellationToken);
+
+            if (operations.Count == 0)
+            {
+                var existingInvoice = await _dbContext.Invoices
+                    .AsNoTracking()
+                    .Where(invoice =>
+                        invoice.CustomerId == command.CustomerId
+                        && invoice.PeriodStart == periodStart
+                        && invoice.PeriodEnd == periodEnd)
+                    .OrderByDescending(invoice => invoice.CreatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (existingInvoice is not null)
+                    return Map(existingInvoice);
+
+                throw new InvalidOperationException(
+                    "There are no pending operations for the billing period.");
+            }
+
+            if (!BillingPeriodRules.CanGenerateInvoice(
+                    billingPeriod,
+                    DateTimeOffset.UtcNow))
+            {
+                throw new InvalidOperationException(
+                    "The billing period cannot generate an invoice yet.");
+            }
 
             var invoice = new Invoice(
                 Guid.NewGuid(),
@@ -93,12 +121,34 @@ public sealed class InvoiceRepository : IInvoiceRepository
                     DateTimeOffset.UtcNow);
             }
 
-            if (operations.Count > 0)
-                invoice.FinalizeInvoice();
+            invoice.FinalizeInvoice();
 
-            await _dbContext.Invoices.AddAsync(
-                invoice,
-                cancellationToken);
+            _dbContext.Invoices.Add(invoice);
+
+            var eventId = Guid.NewGuid();
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                EventId = eventId,
+                InvoiceId = invoice.Id,
+                CustomerId = invoice.CustomerId,
+                PeriodStart = invoice.PeriodStart,
+                PeriodEnd = invoice.PeriodEnd,
+                Total = invoice.Total.Amount,
+                CreatedAt = invoice.CreatedAt,
+                Items = invoice.Items.Select(item => new
+                {
+                    OperationId = item.OperationId,
+                    Amount = item.Amount.Amount
+                })
+            });
+
+            _dbContext.OutboxMessages.Add(
+                new OutboxMessage(
+                    eventId,
+                    "InvoiceCreated.v1",
+                    invoice.Id,
+                    payload));
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -108,7 +158,9 @@ public sealed class InvoiceRepository : IInvoiceRepository
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (_dbContext.Database.CurrentTransaction is not null)
+                await transaction.RollbackAsync(cancellationToken);
+
             throw;
         }
     }
@@ -117,13 +169,20 @@ public sealed class InvoiceRepository : IInvoiceRepository
         Guid id,
         CancellationToken cancellationToken = default)
     {
+        if (id == Guid.Empty)
+            throw new ArgumentException(
+                "Invoice id cannot be empty.",
+                nameof(id));
+
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                i => i.Id == id,
+            .SingleOrDefaultAsync(
+                invoice => invoice.Id == id,
                 cancellationToken);
 
-        return invoice is null ? null : Map(invoice);
+        return invoice is null
+            ? null
+            : Map(invoice);
     }
 
     public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
@@ -135,14 +194,18 @@ public sealed class InvoiceRepository : IInvoiceRepository
             .AsQueryable();
 
         if (customerId.HasValue)
+        {
             query = query.Where(
-                i => i.CustomerId == customerId.Value);
+                invoice => invoice.CustomerId == customerId.Value);
+        }
 
         var invoices = await query
-            .OrderByDescending(i => i.CreatedAt)
+            .OrderByDescending(invoice => invoice.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return invoices.Select(Map).ToList();
+        return invoices
+            .Select(Map)
+            .ToList();
     }
 
     private static InvoiceDto Map(Invoice invoice)
@@ -155,4 +218,3 @@ public sealed class InvoiceRepository : IInvoiceRepository
             invoice.Status.ToString(),
             invoice.CreatedAt);
 }
-

@@ -3,8 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using InboxMessage = Comven_VehicleBilling.Infrastructure.Inbox.InboxMessage;
 using OutboxMessage = Comven_VehicleBilling.Infrastructure.Outbox.OutboxMessage;
 
-namespace Comven_VehicleBilling.Infrastructure.Persistence;
-
 public sealed class VehicleBillingDbContext : DbContext
 {
     public VehicleBillingDbContext(
@@ -22,11 +20,11 @@ public sealed class VehicleBillingDbContext : DbContext
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<BalanceCredit> BalanceCredits => Set<BalanceCredit>();
 
-  protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-modelBuilder.ApplyConfigurationsFromAssembly(
+        modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(VehicleBillingDbContext).Assembly);
     }
 }

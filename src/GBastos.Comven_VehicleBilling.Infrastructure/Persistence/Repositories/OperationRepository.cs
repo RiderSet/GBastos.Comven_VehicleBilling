@@ -479,6 +479,12 @@ public sealed class OperationRepository : IOperationRepository
 
     var totalCount = await query.CountAsync(cancellationToken);
 
+    if (page < 1)
+      throw new ArgumentOutOfRangeException(nameof(page));
+
+    if (pageSize < 1 || pageSize > 100)
+      throw new ArgumentOutOfRangeException(nameof(pageSize));
+
     var totalPages = totalCount == 0
         ? 0
         : (int)Math.Ceiling(totalCount / (double)pageSize);

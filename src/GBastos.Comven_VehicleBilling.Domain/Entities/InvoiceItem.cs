@@ -1,11 +1,13 @@
-using Comven_VehicleBilling.Domain.ValueObjects;
+﻿using Comven_VehicleBilling.Domain.ValueObjects;
 
 namespace Comven_VehicleBilling.Domain.Entities;
 
 public sealed class InvoiceItem
 {
     public Guid InvoiceId { get; private set; }
+
     public Guid OperationId { get; private set; }
+
     public Money Amount { get; private set; } = Money.Zero;
 
     public Invoice Invoice { get; private set; } = null!;
@@ -21,18 +23,20 @@ public sealed class InvoiceItem
     {
         if (invoiceId == Guid.Empty)
             throw new ArgumentException(
-                "O ID da fatura é obrigatório.", nameof(invoiceId));
+                "InvoiceId cannot be empty.",
+                nameof(invoiceId));
 
         if (operationId == Guid.Empty)
             throw new ArgumentException(
-                "O ID da operação é obrigatório.", nameof(operationId));
+                "OperationId cannot be empty.",
+                nameof(operationId));
 
         ArgumentNullException.ThrowIfNull(amount);
 
-        if (!amount.IsPositive)
+        if (amount.Amount <= 0)
             throw new ArgumentOutOfRangeException(
                 nameof(amount),
-                "O valor do item deve ser maior que zero.");
+                "Invoice item amount must be greater than zero.");
 
         InvoiceId = invoiceId;
         OperationId = operationId;

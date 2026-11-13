@@ -30,15 +30,17 @@ public sealed class OperationIdempotencyTests
         return new VehicleBillingDbContext(options);
     }
 
-    private static async Task<Guid> CreateCustomerAsync()
+    private static async Task<Guid> CreateCustomerAsync(
+        CustomerPlan plan = CustomerPlan.Prepaid,
+        decimal initialBalance = 120.01m)
     {
         var customerId = Guid.NewGuid();
 
         var customer = new Customer(
             customerId,
             $"Idempotency Test {customerId:N}",
-            CustomerPlan.Prepaid,
-            Money.Of(120.01m),
+            plan,
+            Money.Of(initialBalance),
             DateTimeOffset.UtcNow);
 
         await using var db = CreateDbContext();
@@ -47,7 +49,6 @@ public sealed class OperationIdempotencyTests
 
         return customerId;
     }
-
     private static CreateOperationCommand NewCommand(
         Guid externalId,
         Guid customerId,
@@ -476,7 +477,129 @@ public sealed class OperationIdempotencyTests
     }
   }
 
+
+    [Fact]
+    public async Task Prepaid_operation_must_debit_balance_and_create_ledger_and_outbox()
+    {
+        const decimal initialBalance = 120.01m;
+        const decimal operationAmount = 12.50m;
+        const decimal expectedBalance = 107.51m;
+
+        var customerId = await CreateCustomerAsync(
+            CustomerPlan.Prepaid,
+            initialBalance);
+
+        var externalId = Guid.NewGuid();
+
+        try
+        {
+            OperationDto result;
+
+            await using (var db = CreateDbContext())
+            {
+                result = await new OperationRepository(db).CreateAsync(
+                    NewCommand(externalId, customerId, operationAmount));
+            }
+
+            Assert.Equal("Charged", result.Status);
+            Assert.Equal(operationAmount, result.Amount);
+
+            await using var verifyDb = CreateDbContext();
+
+            var customer = await verifyDb.Customers
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == customerId);
+
+            Assert.Equal(expectedBalance, customer.Balance.Amount);
+
+            var operation = await verifyDb.Operations
+                .SingleAsync(x => x.Id == result.Id);
+
+            Assert.Equal(OperationStatus.Charged, operation.Status);
+
+            var ledgerEntries = await verifyDb.LedgerEntries
+                .Where(x => x.OperationId == result.Id)
+                .ToListAsync();
+
+            var ledgerEntry = Assert.Single(ledgerEntries);
+
+            Assert.Equal(LedgerEntryType.Debit, ledgerEntry.Type);
+            Assert.Equal(operationAmount, ledgerEntry.Amount.Amount);
+
+            var outboxMessages = await verifyDb.OutboxMessages
+                .Where(x => x.AggregateId == result.Id)
+                .ToListAsync();
+
+            var outboxMessage = Assert.Single(outboxMessages);
+
+            Assert.Equal("OperationCreated.v1", outboxMessage.MessageType);
+        }
+        finally
+        {
+            await CleanupAsync(externalId, customerId);
+        }
+    }
+
+    [Fact]
+    public async Task Postpaid_operation_must_not_debit_balance_or_create_ledger()
+    {
+        const decimal initialBalance = 0m;
+        const decimal operationAmount = 12.50m;
+
+        var customerId = await CreateCustomerAsync(
+            CustomerPlan.Postpaid,
+            initialBalance);
+
+        var externalId = Guid.NewGuid();
+
+        try
+        {
+            OperationDto result;
+
+            await using (var db = CreateDbContext())
+            {
+                result = await new OperationRepository(db).CreateAsync(
+                    NewCommand(externalId, customerId, operationAmount));
+            }
+
+            Assert.Equal("AwaitingInvoice", result.Status);
+            Assert.Equal(operationAmount, result.Amount);
+
+            await using var verifyDb = CreateDbContext();
+
+            var customer = await verifyDb.Customers
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == customerId);
+
+            Assert.Equal(initialBalance, customer.Balance.Amount);
+
+            var operation = await verifyDb.Operations
+                .SingleAsync(x => x.Id == result.Id);
+
+            Assert.Equal(OperationStatus.AwaitingInvoice, operation.Status);
+
+            var ledgerEntries = await verifyDb.LedgerEntries
+                .Where(x => x.OperationId == result.Id)
+                .ToListAsync();
+
+            Assert.Empty(ledgerEntries);
+
+            var outboxMessages = await verifyDb.OutboxMessages
+                .Where(x => x.AggregateId == result.Id)
+                .ToListAsync();
+
+            var outboxMessage = Assert.Single(outboxMessages);
+
+            Assert.Equal("OperationCreated.v1", outboxMessage.MessageType);
+        }
+        finally
+        {
+            await CleanupAsync(externalId, customerId);
+        }
+    }
 }
+
+
 
 
 

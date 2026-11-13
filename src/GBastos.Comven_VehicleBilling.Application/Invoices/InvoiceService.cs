@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 namespace Comven_VehicleBilling.Application.Invoices;
 
@@ -33,22 +33,22 @@ public sealed class InvoiceService
             command, cancellationToken);
     }
 
-    public async Task<InvoiceDto?> GetByIdAsync(
-        Guid id,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
+  public async Task<InvoiceDto?> GetByIdAsync(
+      Guid id,
+      CancellationToken cancellationToken = default)
+  {
+    cancellationToken.ThrowIfCancellationRequested();
 
-        if (id == Guid.Empty)
-            throw new ArgumentException(
-                "O identificador da fatura é inválido.",
-                nameof(id));
+    if (id == Guid.Empty)
+      throw new ArgumentException(
+          "O identificador da fatura é inválido.",
+          nameof(id));
 
-        return await _repository.GetByIdAsync(
-            id, cancellationToken);
-    }
+    return await _repository.GetByIdAsync(
+        id, cancellationToken);
+  }
 
-    public Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
+  public Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
         Guid? customerId = null,
         CancellationToken cancellationToken = default)
     {

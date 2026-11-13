@@ -1,4 +1,5 @@
-using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Application.Abstractions.Billing;
 using Comven_VehicleBilling.Infrastructure.BillingsProvider;
 using Comven_VehicleBilling.Infrastructure.Inbox;
 using Comven_VehicleBilling.Infrastructure.Mensageria;
@@ -43,10 +44,11 @@ public static class DependencyInjection
     if (string.IsNullOrWhiteSpace(connectionString))
     {
       throw new InvalidOperationException(
-          "A connectionstring 'DefaultConnection' não foi configurada.");
+          "A connectionstring 'DefaultConnection' nÃ£o foi configurada.");
     }
 
     services.AddDbContext<VehicleBillingDbContext>(options =>
         options.UseNpgsql(connectionString));
   }
 }
+

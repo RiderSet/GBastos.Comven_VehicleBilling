@@ -1,73 +1,54 @@
-namespace Comven_VehicleBilling.Domain.ValueObjects;
+﻿namespace Comven_VehicleBilling.Domain.ValueObjects;
 
 public sealed record BillingPeriod
 {
-  public DateOnly StartDate { get; }
+    public DateOnly StartDate { get; }
+    public DateOnly EndDateExclusive { get; }
 
-  public DateOnly EndDateExclusive { get; }
+    public int Year => StartDate.Year;
+    public int Month => StartDate.Month;
 
-  public int Year => StartDate.Year;
-
-  public int Month => StartDate.Month;
-
-  private BillingPeriod(
-      DateOnly startDate,
-      DateOnly endDateExclusive)
-  {
-    if (endDateExclusive <= startDate)
+    private BillingPeriod(
+        DateOnly startDate,
+        DateOnly endDateExclusive)
     {
-      throw new ArgumentException(
-          "O final do período deve ser maior que o início.");
+        if (endDateExclusive <= startDate)
+            throw new ArgumentException(
+                "EndDateExclusive must be greater than StartDate.");
+
+        StartDate = startDate;
+        EndDateExclusive = endDateExclusive;
     }
 
-    StartDate = startDate;
-    EndDateExclusive = endDateExclusive;
-  }
-
-  public static BillingPeriod ForMonth(
-      int year,
-      int month)
-  {
-    if (year < 1 || year > 9999)
+    public static BillingPeriod ForMonth(int year, int month)
     {
-      throw new ArgumentOutOfRangeException(nameof(year));
+        if (year < 1 || year > 9999)
+            throw new ArgumentOutOfRangeException(nameof(year));
+
+        if (month < 1 || month > 12)
+            throw new ArgumentOutOfRangeException(nameof(month));
+
+        var startDate = new DateOnly(year, month, 1);
+        var endDateExclusive = startDate.AddMonths(1);
+
+        return new BillingPeriod(
+            startDate,
+            endDateExclusive);
     }
 
-    if (month < 1 || month > 12)
+    public static BillingPeriod PreviousMonth(DateTimeOffset currentDate)
     {
-      throw new ArgumentOutOfRangeException(nameof(month));
+        var previousMonth = currentDate.AddMonths(-1);
+
+        return ForMonth(
+            previousMonth.Year,
+            previousMonth.Month);
     }
 
-    var startDate = new DateOnly(year, month, 1);
+    public bool Contains(DateOnly date)
+        => date >= StartDate
+           && date < EndDateExclusive;
 
-    var endDateExclusive =
-        startDate.AddMonths(1);
-
-    return new BillingPeriod(
-        startDate,
-        endDateExclusive);
-  }
-
-  public static BillingPeriod PreviousMonth(
-      DateTimeOffset currentDate)
-  {
-    var previousMonth =
-        currentDate.AddMonths(-1);
-
-    return ForMonth(
-        previousMonth.Year,
-        previousMonth.Month);
-  }
-
-  public bool Contains(DateOnly date)
-  {
-    return date >= StartDate
-        && date < EndDateExclusive;
-  }
-
-  public override string ToString()
-  {
-    return $"{Year:D4}-{Month:D2}";
-  }
-
+    public override string ToString()
+        => $"{Year:D4}-{Month:D2}";
 }
