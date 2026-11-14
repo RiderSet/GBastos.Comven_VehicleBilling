@@ -18,15 +18,25 @@ internal static class InvoiceScenarios
     Console.WriteLine("======================================");
     Console.WriteLine();
 
-    Console.Write("Informe a data de referência (yyyy-MM-dd): ");
+    Console.Write("Informe o mês de referência (yyyy-MM): ");
 
-    if (!DateOnly.TryParse(
-            Console.ReadLine(),
+    var input = Console.ReadLine();
+
+    if (!DateOnly.TryParseExact(
+            input,
+            "yyyy-MM",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
             out var referenceDate))
     {
-      Console.WriteLine("Data de referência inválida.");
+      Console.WriteLine("Mês de referência inválido. Utilize yyyy-MM.");
       return;
     }
+
+    referenceDate = new DateOnly(
+        referenceDate.Year,
+        referenceDate.Month,
+        1);
 
     var email =
         $"simulador-postpaid-{Guid.NewGuid():N}@comven.com.br";
@@ -122,6 +132,51 @@ internal static class InvoiceScenarios
         $"HTTP fatura: {(int)invoiceResponse.StatusCode} " +
         invoiceResponse.StatusCode);
 
+    if (invoiceResponse.StatusCode == HttpStatusCode.BadRequest)
+    {
+      try
+      {
+        using var errorDocument =
+            JsonDocument.Parse(invoiceBody);
+
+        var detail =
+            errorDocument.RootElement
+                .TryGetProperty("detail", out var detailElement)
+                ? detailElement.GetString()
+                : null;
+
+        if (!string.IsNullOrWhiteSpace(detail)
+            && detail.Contains(
+                "ainda não pode gerar",
+                StringComparison.OrdinalIgnoreCase))
+        {
+          Console.WriteLine();
+          Console.WriteLine("PERÍODO AINDA ABERTO");
+          Console.WriteLine("--------------------------------------");
+          Console.WriteLine(
+              $"Referência: {referenceDate:yyyy-MM}");
+          Console.WriteLine(
+              "A API recusou corretamente a geração " +
+              "porque o período ainda não está fechado.");
+          Console.WriteLine();
+          Console.WriteLine(
+              "A operação permanece aguardando faturamento.");
+          Console.WriteLine();
+          Console.WriteLine(
+              "Este comportamento é esperado para o mês atual.");
+          return;
+        }
+      }
+      catch (JsonException)
+      {
+        // Mantém o tratamento genérico abaixo.
+      }
+
+      Console.WriteLine("Não foi possível gerar a fatura.");
+      Console.WriteLine(invoiceBody);
+      return;
+    }
+
     if (!invoiceResponse.IsSuccessStatusCode)
     {
       Console.WriteLine("Não foi possível gerar a fatura.");
@@ -139,7 +194,8 @@ internal static class InvoiceScenarios
 
     if (invoice is null)
     {
-      Console.WriteLine("Resposta da API não contém uma fatura válida.");
+      Console.WriteLine(
+          "Resposta da API não contém uma fatura válida.");
       Console.WriteLine(invoiceBody);
       return;
     }
@@ -156,8 +212,72 @@ internal static class InvoiceScenarios
     Console.WriteLine($"Status:       {invoice.Status}");
     Console.WriteLine(
         $"Criada em:    {invoice.CreatedAt:dd/MM/yyyy HH:mm:ss}");
+
     Console.WriteLine();
-    Console.WriteLine("Guarde o ID da fatura para o cenário 4.");
+    Console.WriteLine("Testando idempotência da geração...");
+
+    var secondGenerationId = Guid.NewGuid();
+
+    using var secondInvoiceResponse =
+        await apiClient.CreateInvoiceAsync(
+            customer.Id,
+            referenceDate,
+            secondGenerationId);
+
+    var secondInvoiceBody =
+        await secondInvoiceResponse.Content.ReadAsStringAsync();
+
+    Console.WriteLine(
+        $"Segunda geração: {(int)secondInvoiceResponse.StatusCode} " +
+        secondInvoiceResponse.StatusCode);
+
+    if (!secondInvoiceResponse.IsSuccessStatusCode)
+    {
+      Console.WriteLine(
+          "A segunda tentativa de geração falhou.");
+      Console.WriteLine(secondInvoiceBody);
+      return;
+    }
+
+    var secondInvoice =
+        JsonSerializer.Deserialize<InvoiceResponse>(
+            secondInvoiceBody,
+            new JsonSerializerOptions
+            {
+              PropertyNameCaseInsensitive = true
+            });
+
+    if (secondInvoice is null)
+    {
+      Console.WriteLine(
+          "Resposta inválida na segunda geração.");
+      Console.WriteLine(secondInvoiceBody);
+      return;
+    }
+
+    if (secondInvoice.Id != invoice.Id)
+    {
+      Console.WriteLine(
+          "FALHA DE IDEMPOTÊNCIA: a segunda tentativa " +
+          "gerou outra fatura.");
+      Console.WriteLine(
+          $"Primeira fatura: {invoice.Id}");
+      Console.WriteLine(
+          $"Segunda fatura:  {secondInvoice.Id}");
+      return;
+    }
+
+    Console.WriteLine(
+        "Idempotência confirmada: a segunda tentativa " +
+        "retornou a mesma fatura.");
+
+    Console.WriteLine();
+    Console.WriteLine("======================================");
+    Console.WriteLine(" FATURAMENTO CONCLUÍDO COM SUCESSO");
+    Console.WriteLine("======================================");
+    Console.WriteLine();
+    Console.WriteLine(
+        "Guarde o ID da fatura para o cenário 4.");
   }
 
   public static async Task GetAsync(

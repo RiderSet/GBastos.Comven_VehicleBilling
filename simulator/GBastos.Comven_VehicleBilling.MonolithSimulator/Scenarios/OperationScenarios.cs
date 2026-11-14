@@ -155,7 +155,7 @@ internal static class OperationScenarios
     // 6. Conciliar saldo e lançamentos do razão
     Console.WriteLine("\n[6/6] Validando saldo e razão...");
 
-    var today = DateOnly.FromDateTime(DateTime.Now);
+    var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     var statementResponse = await client.GetStatementAsync(
         customerId,

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Http.Json;
 using Comven_VehicleBilling.MonolithSimulator.Models.Requests;
 using Comven_VehicleBilling.MonolithSimulator.Models.Responses;
@@ -62,7 +62,7 @@ internal sealed class VehicleBillingApiClient
 
     if (customerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente ÃƒÂ© obrigatÃƒÂ³rio.",
+          "O identificador do cliente ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³rio.",
           nameof(customerId));
 
     if (amount <= 0)
@@ -90,17 +90,17 @@ internal sealed class VehicleBillingApiClient
 
     if (request.ExternalOperationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador externo da operação é obrigatório.",
+          "O identificador externo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(request));
 
     if (request.CustomerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente é obrigatório.",
+          "O identificador do cliente Ã© obrigatÃ³rio.",
           nameof(request));
 
     if (string.IsNullOrWhiteSpace(request.OperationType))
       throw new ArgumentException(
-          "O tipo da operação é obrigatório.",
+          "O tipo da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(request));
 
     if (request.Amount <= 0)
@@ -125,7 +125,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId.HasValue && customerId.Value == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente ÃƒÂ© invÃƒÂ¡lido.",
+          "O identificador do cliente ÃƒÆ’Ã‚Â© invÃƒÆ’Ã‚Â¡lido.",
           nameof(customerId));
 
     if (page < 1)
@@ -168,7 +168,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operaÃƒÂ§ÃƒÂ£o ÃƒÂ© obrigatÃƒÂ³rio.",
+          "O identificador da operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³rio.",
           nameof(operationId));
 
     return _httpClient.GetAsync(
@@ -182,7 +182,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (operationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da operaÃƒÂ§ÃƒÂ£o ÃƒÂ© obrigatÃƒÂ³rio.",
+          "O identificador da operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³rio.",
           nameof(operationId));
 
     return _httpClient.PostAsync(
@@ -224,17 +224,17 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente Ã© obrigatÃ³rio.",
+          "O identificador do cliente ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(customerId));
 
     if (referenceDate == DateOnly.MinValue)
       throw new ArgumentException(
-          "A data de referÃªncia Ã© obrigatÃ³ria.",
+          "A data de referÃƒÂªncia ÃƒÂ© obrigatÃƒÂ³ria.",
           nameof(referenceDate));
 
     if (generationId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da geraÃ§Ã£o Ã© obrigatÃ³rio.",
+          "O identificador da geraÃƒÂ§ÃƒÂ£o ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(generationId));
 
     var request = new
@@ -256,7 +256,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (invoiceId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da fatura Ã© obrigatÃ³rio.",
+          "O identificador da fatura ÃƒÂ© obrigatÃƒÂ³rio.",
           nameof(invoiceId));
 
     return _httpClient.GetAsync(
@@ -270,7 +270,7 @@ internal sealed class VehicleBillingApiClient
   {
     if (customerId.HasValue && customerId.Value == Guid.Empty)
       throw new ArgumentException(
-          "O identificador do cliente Ã© invÃ¡lido.",
+          "O identificador do cliente ÃƒÂ© invÃƒÂ¡lido.",
           nameof(customerId));
 
     var url = customerId.HasValue

@@ -82,7 +82,7 @@ public async Task<InvoiceDto> CreateAsync(
                 now))
         {
             throw new InvalidOperationException(
-                "The billing period cannot generate an invoice yet.");
+                "O período de faturamento ainda não pode gerar uma fatura.");
         }
 
         // 5. Busca as operaÃ§Ãµes pendentes do perÃ­odo.
