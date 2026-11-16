@@ -46,6 +46,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Handlers e consumidores de mensagens.
 builder.Services.AddScoped<OperationCreatedHandler>();
 builder.Services.AddScoped<OperationRefundedHandler>();
+builder.Services.AddScoped<InvoiceCreatedHandler>();
+builder.Services.AddScoped<SupplementaryInvoiceCreatedHandler>();
 
 // Publica eventos da Outbox e consome eventos com Inbox/idempotÃªncia.
 builder.Services.AddHostedService<OutboxWorker>();

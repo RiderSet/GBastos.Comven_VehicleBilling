@@ -70,8 +70,8 @@ public sealed class RabbitMqConsumer : BackgroundService
             ConsumerName,
             QueueName);
 
-        // Supervisiona a conexão. Se ela cair, sai do ciclo
-        // e tenta estabelecer uma nova conexão.
+        // Supervisiona a conexÃ£o. Se ela cair, sai do ciclo
+        // e tenta estabelecer uma nova conexÃ£o.
         while (!stoppingToken.IsCancellationRequested &&
                _connection?.IsOpen == true &&
                _consumerChannel?.IsOpen == true &&
@@ -85,7 +85,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         if (!stoppingToken.IsCancellationRequested)
         {
           _logger.LogWarning(
-              "Conexão ou canal RabbitMQ indisponível. Será realizada uma nova conexão.");
+              "ConexÃ£o ou canal RabbitMQ indisponÃ­vel. SerÃ¡ realizada uma nova conexÃ£o.");
         }
       }
       catch (OperationCanceledException)
@@ -150,7 +150,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       throw new InvalidOperationException(
           "Configure RABBITMQ_USER, RABBITMQ_PASSWORD, " +
-          "RABBITMQ_HOST e RABBITMQ_VHOST nas variáveis de ambiente.");
+          "RABBITMQ_HOST e RABBITMQ_VHOST nas variÃ¡veis de ambiente.");
     }
 
     var port = int.TryParse(portValue, out var parsedPort)
@@ -165,7 +165,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       Password = password,
       VirtualHost = virtualHost,
 
-      // A reconexão é controlada pelo ExecuteAsync.
+      // A reconexÃ£o Ã© controlada pelo ExecuteAsync.
       AutomaticRecoveryEnabled = false
     };
 
@@ -176,7 +176,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     _consumerChannel = await _connection.CreateChannelAsync(
         cancellationToken: cancellationToken);
 
-    // Canal exclusivo para publicações com confirmação.
+    // Canal exclusivo para publicaÃ§Ãµes com confirmaÃ§Ã£o.
     var publisherOptions = new CreateChannelOptions(
         publisherConfirmationsEnabled: true,
         publisherConfirmationTrackingEnabled: true);
@@ -194,7 +194,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-        "Conexão RabbitMQ estabelecida. Fila principal: {QueueName}.",
+        "ConexÃ£o RabbitMQ estabelecida. Fila principal: {QueueName}.",
         QueueName);
   }
 
@@ -285,7 +285,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     if (messageId == Guid.Empty)
     {
       _logger.LogError(
-          "Mensagem sem MessageId GUID válido. DeliveryTag={DeliveryTag}.",
+          "Mensagem sem MessageId GUID vÃ¡lido. DeliveryTag={DeliveryTag}.",
           args.DeliveryTag);
 
       await RejectMessageAsync(channel, args.DeliveryTag);
@@ -313,6 +313,11 @@ public sealed class RabbitMqConsumer : BackgroundService
 
       var refundedHandler =
           services.GetRequiredService<OperationRefundedHandler>();
+      var invoiceCreatedHandler =
+          services.GetRequiredService<InvoiceCreatedHandler>();
+
+      var supplementaryInvoiceCreatedHandler =
+          services.GetRequiredService<SupplementaryInvoiceCreatedHandler>();
 
       await using var transaction =
           await dbContext.Database.BeginTransactionAsync(
@@ -340,10 +345,21 @@ public sealed class RabbitMqConsumer : BackgroundService
                 args.Body,
                 cancellationToken);
             break;
+          case "InvoiceCreated.v1":
+            await invoiceCreatedHandler.HandleAsync(
+                args.Body,
+                cancellationToken);
+            break;
+
+          case "SupplementaryInvoiceCreated.v1":
+            await supplementaryInvoiceCreatedHandler.HandleAsync(
+                args.Body,
+                cancellationToken);
+            break;
 
           default:
             throw new PermanentMessageException(
-                $"Tipo de mensagem não suportado: {messageType ?? "(vazio)"}.");
+                $"Tipo de mensagem nÃ£o suportado: {messageType ?? "(vazio)"}.");
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -355,24 +371,24 @@ public sealed class RabbitMqConsumer : BackgroundService
       else
       {
         _logger.LogInformation(
-            "Mensagem {MessageId} já consta na Inbox. Nenhum efeito será repetido.",
+            "Mensagem {MessageId} jÃ¡ consta na Inbox. Nenhum efeito serÃ¡ repetido.",
             messageId);
       }
 
-      // Commit da transação antes de qualquer ACK.
+      // Commit da transaÃ§Ã£o antes de qualquer ACK.
       await transaction.CommitAsync(cancellationToken);
     }
     catch (OperationCanceledException)
         when (cancellationToken.IsCancellationRequested)
     {
-      // Sem ACK: o RabbitMQ poderá reentregar a mensagem.
+      // Sem ACK: o RabbitMQ poderÃ¡ reentregar a mensagem.
       return;
     }
     catch (PermanentMessageException exception)
     {
       _logger.LogError(
           exception,
-          "Mensagem {MessageId} rejeitada por conteúdo inválido.",
+          "Mensagem {MessageId} rejeitada por conteÃºdo invÃ¡lido.",
           messageId);
 
       await RejectMessageAsync(
@@ -395,14 +411,14 @@ public sealed class RabbitMqConsumer : BackgroundService
       return;
     }
 
-    // FASE 2: confirmação RabbitMQ.
-    // Neste ponto, o commit PostgreSQL já foi concluído.
+    // FASE 2: confirmaÃ§Ã£o RabbitMQ.
+    // Neste ponto, o commit PostgreSQL jÃ¡ foi concluÃ­do.
     try
     {
       if (!channel.IsOpen)
       {
         _logger.LogWarning(
-            "PostgreSQL confirmou {MessageId}, mas o canal RabbitMQ está fechado. A mensagem poderá ser reentregue.",
+            "PostgreSQL confirmou {MessageId}, mas o canal RabbitMQ estÃ¡ fechado. A mensagem poderÃ¡ ser reentregue.",
             messageId);
 
         return;
@@ -414,17 +430,17 @@ public sealed class RabbitMqConsumer : BackgroundService
           cancellationToken: CancellationToken.None);
 
       _logger.LogInformation(
-          "Mensagem {MessageId} confirmada no RabbitMQ após commit PostgreSQL.",
+          "Mensagem {MessageId} confirmada no RabbitMQ apÃ³s commit PostgreSQL.",
           messageId);
     }
     catch (Exception exception)
     {
-      // Não publicar retry aqui!
-      // O PostgreSQL já confirmou a transação.
-      // A Inbox protegerá contra efeitos duplicados na reentrega.
+      // NÃ£o publicar retry aqui!
+      // O PostgreSQL jÃ¡ confirmou a transaÃ§Ã£o.
+      // A Inbox protegerÃ¡ contra efeitos duplicados na reentrega.
       _logger.LogError(
           exception,
-          "Commit PostgreSQL concluído para {MessageId}, mas houve falha no ACK RabbitMQ. A mensagem poderá ser reentregue.",
+          "Commit PostgreSQL concluÃ­do para {MessageId}, mas houve falha no ACK RabbitMQ. A mensagem poderÃ¡ ser reentregue.",
           messageId);
     }
   }
@@ -483,7 +499,7 @@ public sealed class RabbitMqConsumer : BackgroundService
 
       // Publica no canal exclusivo, com Publisher Confirms.
       // mandatory=true evita descartar silenciosamente uma
-      // mensagem sem rota; a confirmação é acompanhada pelo cliente.
+      // mensagem sem rota; a confirmaÃ§Ã£o Ã© acompanhada pelo cliente.
       await publisherChannel.BasicPublishAsync(
           exchange: string.Empty,
           routingKey: retry.QueueName,
@@ -496,7 +512,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Falha ao publicar retry de {MessageId}. A mensagem original será reentregue.",
+          "Falha ao publicar retry de {MessageId}. A mensagem original serÃ¡ reentregue.",
           messageId);
 
       if (consumerChannel.IsOpen)
@@ -511,7 +527,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       return;
     }
 
-    // Só confirma a mensagem original depois que a publicação
+    // SÃ³ confirma a mensagem original depois que a publicaÃ§Ã£o
     // do retry foi confirmada pelo canal publicador.
     try
     {
@@ -530,11 +546,11 @@ public sealed class RabbitMqConsumer : BackgroundService
     }
     catch (Exception exception)
     {
-      // Se o ACK falhar, a mensagem original poderá ser
+      // Se o ACK falhar, a mensagem original poderÃ¡ ser
       // reentregue. A Inbox protege contra efeitos duplicados.
       _logger.LogError(
           exception,
-          "Retry publicado para {MessageId}, mas não foi possível confirmar a mensagem original.",
+          "Retry publicado para {MessageId}, mas nÃ£o foi possÃ­vel confirmar a mensagem original.",
           messageId);
     }
   }
@@ -587,7 +603,7 @@ public sealed class RabbitMqConsumer : BackgroundService
               out var eventId))
       {
         throw new PermanentMessageException(
-            "EventId do payload não é um GUID válido.");
+            "EventId do payload nÃ£o Ã© um GUID vÃ¡lido.");
       }
 
       if (eventId != messageId)
@@ -599,7 +615,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     catch (JsonException exception)
     {
       throw new PermanentMessageException(
-          "Payload JSON inválido.",
+          "Payload JSON invÃ¡lido.",
           exception);
     }
   }
@@ -662,7 +678,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       {
         _logger.LogDebug(
             exception,
-            "Erro ao fechar canal de publicação RabbitMQ.");
+            "Erro ao fechar canal de publicaÃ§Ã£o RabbitMQ.");
       }
 
       _publisherChannel = null;
@@ -681,7 +697,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       {
         _logger.LogDebug(
             exception,
-            "Erro ao fechar conexão RabbitMQ.");
+            "Erro ao fechar conexÃ£o RabbitMQ.");
       }
 
       _connection = null;
