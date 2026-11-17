@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Infrastructure.Inbox;
+using Comven_VehicleBilling.Infrastructure.Inbox;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -100,5 +100,51 @@ public sealed class InboxPersistenceTests
                 $"DELETE FROM inbox_messages WHERE id = {messageId}");
         }
     }
+
+  [Fact]
+  public async Task ShouldRegisterMessageOnlyOnceUnderConcurrency()
+  {
+    var messageId = Guid.NewGuid();
+    const string consumer = "inbox-concurrency-test";
+
+    try
+    {
+      var start = new TaskCompletionSource(
+          TaskCreationOptions.RunContinuationsAsynchronously);
+
+      var ready = 0;
+
+      async Task<bool> RegisterAsync()
+      {
+        if (Interlocked.Increment(ref ready) == 2)
+          start.TrySetResult();
+
+        await start.Task;
+
+        await using var dbContext = CreateDbContext();
+
+        var repository = new InboxRepository(dbContext);
+
+        return await repository.TryRegisterAsync(
+            messageId,
+            consumer,
+            CancellationToken.None);
+      }
+
+      var results = await Task.WhenAll(
+          RegisterAsync(),
+          RegisterAsync());
+
+      Assert.Single(results, result => result);
+      Assert.Single(results, result => !result);
+    }
+    finally
+    {
+      await using var cleanupContext = CreateDbContext();
+
+      await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+          $"DELETE FROM inbox_messages WHERE id = {messageId}");
+    }
+  }
 }
 
