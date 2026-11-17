@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Comven_VehicleBilling.Infrastructure.Outbox;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -109,7 +109,7 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
       {
         throw new InvalidOperationException(
             "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
-            "e RABBITMQ_VHOST nas variáveis de ambiente.");
+            "e RABBITMQ_VHOST nas variÃ¡veis de ambiente.");
       }
 
       var factory = new ConnectionFactory
@@ -156,7 +156,7 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-        "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
+        "ConexÃ£o RabbitMQ estabelecida. Fila: {QueueName}.",
         QueueName);
   }
 
@@ -175,3 +175,4 @@ public sealed class RabbitMqPublisher : IAsyncDisposable
     _publishLock.Dispose();
   }
 }
+

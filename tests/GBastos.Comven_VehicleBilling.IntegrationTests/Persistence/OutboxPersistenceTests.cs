@@ -1,4 +1,5 @@
-﻿using Comven_VehicleBilling.Infrastructure.Outbox;
+
+using Comven_VehicleBilling.Infrastructure.Outbox;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -492,6 +493,96 @@ public async Task ShouldReserveMessageOnlyAfterRetryTime()
             .ExecuteDeleteAsync();
     }
 }
+
+  [Fact]
+  public async Task ShouldRecoverMessageWhenReservationExpires()
+  {
+    var message = new OutboxMessage(
+        id: Guid.NewGuid(),
+        messageType: "IntegrationTest.ExpiredReservation",
+        aggregateId: Guid.NewGuid(),
+        payload: """{"source":"expired-reservation-test"}""");
+
+    var expiredLockId = Guid.NewGuid();
+    var expiredAt = DateTime.UtcNow.AddMinutes(-1);
+
+    try
+    {
+      // Persiste a mensagem e simula uma reserva expirada.
+      await using (var setupContext = CreateDbContext())
+      {
+        setupContext.Entry(message)
+            .Property("CreatedAt")
+            .CurrentValue = DateTime.UtcNow.AddYears(-100);
+
+        setupContext.OutboxMessages.Add(message);
+        await setupContext.SaveChangesAsync();
+
+        await setupContext.OutboxMessages
+            .Where(item => item.Id == message.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(
+                    item => item.LockId,
+                    (Guid?)expiredLockId)
+                .SetProperty(
+                    item => item.LockedUntil,
+                    (DateTime?)expiredAt));
+      }
+
+      // O repositório deve recuperar a mensagem expirada.
+      await using (var repositoryContext = CreateDbContext())
+      {
+        var repository = new OutboxRepository(repositoryContext);
+
+        var batch = await repository.GetPendingAsync(1);
+
+        var recoveredMessage = Assert.Single(
+            batch,
+            item => item.Id == message.Id);
+
+        Assert.NotNull(recoveredMessage.LockId);
+        Assert.NotEqual(expiredLockId, recoveredMessage.LockId);
+
+        Assert.NotNull(recoveredMessage.LockedUntil);
+        Assert.True(
+            recoveredMessage.LockedUntil > DateTime.UtcNow);
+      }
+
+      // Confirma a nova reserva diretamente no PostgreSQL.
+      await using (var verificationContext = CreateDbContext())
+      {
+        var persistedMessage =
+            await verificationContext.OutboxMessages
+                .AsNoTracking()
+                .SingleAsync(item => item.Id == message.Id);
+
+        Assert.Equal(
+            message.Id,
+            persistedMessage.Id);
+
+        Assert.NotNull(persistedMessage.LockId);
+        Assert.NotEqual(
+            expiredLockId,
+            persistedMessage.LockId);
+
+        Assert.NotNull(persistedMessage.LockedUntil);
+        Assert.True(
+            persistedMessage.LockedUntil > DateTime.UtcNow);
+
+        Assert.Null(persistedMessage.ProcessedAt);
+      }
+    }
+    finally
+    {
+      // Remove exclusivamente a mensagem criada pelo teste.
+      await using var cleanupContext = CreateDbContext();
+
+      await cleanupContext.OutboxMessages
+          .Where(item => item.Id == message.Id)
+          .ExecuteDeleteAsync();
+    }
+  }
+
 }
 
 
