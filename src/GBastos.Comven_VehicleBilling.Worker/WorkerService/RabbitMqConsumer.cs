@@ -145,6 +145,12 @@ public sealed class RabbitMqConsumer : BackgroundService
         ? parsedPort
         : 5672;
 
+    if (port is < 1 or > 65535)
+    {
+      throw new InvalidOperationException(
+          "RABBITMQ_PORT deve estar entre 1 e 65535.");
+    }
+
     var factory = new ConnectionFactory
     {
       HostName = host,
@@ -397,8 +403,10 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Commit PostgreSQL concluído para {MessageId}, mas houve falha no ACK RabbitMQ.",
+          "Falha ao confirmar mensagem {MessageId} após COMMIT PostgreSQL. O canal será encerrado para permitir a reentrega.",
           messageId);
+
+      await CloseConsumerChannelForRedeliveryAsync();
     }
   }
 
@@ -414,6 +422,10 @@ public sealed class RabbitMqConsumer : BackgroundService
         !consumerChannel.IsOpen ||
         !publisherChannel.IsOpen)
     {
+      _logger.LogWarning(
+          "Não foi possível encaminhar {MessageId} para retry. Os canais RabbitMQ estão indisponíveis.",
+          messageId);
+
       return;
     }
 
@@ -492,7 +504,10 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Retry publicado para {MessageId}, mas o ACK da mensagem original falhou. A Inbox protegerá contra efeitos duplicados.");
+          "Retry publicado para {MessageId}, mas o ACK da mensagem original falhou. O canal será encerrado para permitir a reentrega. A Inbox protegerá contra efeitos duplicados.",
+          messageId);
+
+      await CloseConsumerChannelForRedeliveryAsync();
     }
   }
 
@@ -509,7 +524,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         await channel.CloseAsync();
 
       _logger.LogWarning(
-          "Canal de consumo fechado. Mensagens sem ACK serão reentregues pelo RabbitMQ.");
+          "Canal de consumo fechado. Mensagens sem ACK poderão ser reentregues pelo RabbitMQ.");
     }
     catch (Exception exception)
     {
@@ -532,9 +547,16 @@ public sealed class RabbitMqConsumer : BackgroundService
     return value switch
     {
       byte number when number <= MaxRetryAttempts => number,
-      short number when number >= 0 && number <= MaxRetryAttempts => number,
-      int number when number >= 0 && number <= MaxRetryAttempts => number,
-      long number when number >= 0 && number <= MaxRetryAttempts => (int)number,
+
+      short number when number >= 0 &&
+                        number <= MaxRetryAttempts => number,
+
+      int number when number >= 0 &&
+                      number <= MaxRetryAttempts => number,
+
+      long number when number >= 0 &&
+                       number <= MaxRetryAttempts => (int)number,
+
       _ => MaxRetryAttempts
     };
   }
@@ -594,30 +616,47 @@ public sealed class RabbitMqConsumer : BackgroundService
         : Guid.Empty;
   }
 
-  private static async Task RejectMessageAsync(
+  private async Task RejectMessageAsync(
       IChannel channel,
       ulong deliveryTag)
   {
-    if (!channel.IsOpen)
-      return;
+    try
+    {
+      if (!channel.IsOpen)
+        return;
 
-    await channel.BasicNackAsync(
-        deliveryTag,
-        multiple: false,
-        requeue: false,
-        cancellationToken: CancellationToken.None);
+      await channel.BasicNackAsync(
+          deliveryTag,
+          multiple: false,
+          requeue: false,
+          cancellationToken: CancellationToken.None);
+
+      _logger.LogWarning(
+          "Mensagem rejeitada e encaminhada para Dead Letter Exchange. DeliveryTag={DeliveryTag}.",
+          deliveryTag);
+    }
+    catch (Exception exception)
+    {
+      _logger.LogError(
+          exception,
+          "Falha ao rejeitar mensagem {DeliveryTag}. O canal será encerrado para permitir reentrega.",
+          deliveryTag);
+
+      await CloseConsumerChannelForRedeliveryAsync();
+    }
   }
 
   private async Task CloseConnectionAsync()
   {
     if (_consumerChannel is not null)
     {
+      var channel = _consumerChannel;
+      _consumerChannel = null;
+
       try
       {
-        if (_consumerChannel.IsOpen)
-          await _consumerChannel.CloseAsync();
-
-        _consumerChannel.Dispose();
+        if (channel.IsOpen)
+          await channel.CloseAsync();
       }
       catch (Exception exception)
       {
@@ -625,18 +664,21 @@ public sealed class RabbitMqConsumer : BackgroundService
             exception,
             "Erro ao fechar canal de consumo RabbitMQ.");
       }
-
-      _consumerChannel = null;
+      finally
+      {
+        channel.Dispose();
+      }
     }
 
     if (_publisherChannel is not null)
     {
+      var channel = _publisherChannel;
+      _publisherChannel = null;
+
       try
       {
-        if (_publisherChannel.IsOpen)
-          await _publisherChannel.CloseAsync();
-
-        _publisherChannel.Dispose();
+        if (channel.IsOpen)
+          await channel.CloseAsync();
       }
       catch (Exception exception)
       {
@@ -644,18 +686,21 @@ public sealed class RabbitMqConsumer : BackgroundService
             exception,
             "Erro ao fechar canal de publicação RabbitMQ.");
       }
-
-      _publisherChannel = null;
+      finally
+      {
+        channel.Dispose();
+      }
     }
 
     if (_connection is not null)
     {
+      var connection = _connection;
+      _connection = null;
+
       try
       {
-        if (_connection.IsOpen)
-          await _connection.CloseAsync();
-
-        _connection.Dispose();
+        if (connection.IsOpen)
+          await connection.CloseAsync();
       }
       catch (Exception exception)
       {
@@ -663,8 +708,10 @@ public sealed class RabbitMqConsumer : BackgroundService
             exception,
             "Erro ao fechar conexão RabbitMQ.");
       }
-
-      _connection = null;
+      finally
+      {
+        connection.Dispose();
+      }
     }
   }
 }

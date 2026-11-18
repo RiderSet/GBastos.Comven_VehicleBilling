@@ -2,6 +2,7 @@ namespace Comven_VehicleBilling.Application.Operations;
 
 public sealed record OperationDetailDto(
     Guid Id,
+    Guid ExternalOperationId,
     Guid CustomerId,
     string OperationType,
     decimal Amount,

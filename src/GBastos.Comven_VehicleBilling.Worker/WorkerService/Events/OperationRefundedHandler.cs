@@ -46,7 +46,7 @@ public sealed class OperationRefundedHandler
             message.EventId == Guid.Empty ||
             message.OperationId == Guid.Empty ||
             message.CustomerId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(message.ExternalOperationId) ||
+            message.ExternalOperationId == Guid.Empty ||
             string.IsNullOrWhiteSpace(message.OperationType) ||
             message.Amount <= 0 ||
             message.RefundedAt == default)
@@ -55,7 +55,6 @@ public sealed class OperationRefundedHandler
                 "O payload de OperationRefunded.v1 contém campos obrigatórios inválidos.");
         }
 
-        // Consulta o estado persistido sem modificar dados financeiros.
         var operation = await _operationRepository.GetByIdAsync(
             message.OperationId,
             cancellationToken);
@@ -66,14 +65,13 @@ public sealed class OperationRefundedHandler
                 $"A operação {message.OperationId} do evento de estorno não foi encontrada.");
         }
 
-        // O evento representa um estorno já efetivado pela API.
-        // O Worker apenas confirma a consistência do estado persistido.
         var refundedAtUtc = DateTime.SpecifyKind(
             message.RefundedAt,
             DateTimeKind.Utc);
 
         var isConsistent =
             operation.Id == message.OperationId &&
+            operation.ExternalOperationId == message.ExternalOperationId &&
             operation.CustomerId == message.CustomerId &&
             string.Equals(
                 operation.OperationType,

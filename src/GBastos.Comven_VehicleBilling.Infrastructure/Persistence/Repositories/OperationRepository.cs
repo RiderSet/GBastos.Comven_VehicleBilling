@@ -400,6 +400,8 @@ public sealed class OperationRepository : IOperationRepository
 
     return new OperationDetailDto(
         operation.Id,
+        operation.ExternalOperationId,
+        
         operation.CustomerId,
         operation.Type.ToString(),
         operation.Amount.Amount,
@@ -608,6 +610,8 @@ public sealed class OperationRepository : IOperationRepository
 
     return new OperationDetailDto(
         operation.Id,
+        operation.ExternalOperationId,
+        
         operation.CustomerId,
         operation.Type.ToString(),
         operation.Amount.Amount,
