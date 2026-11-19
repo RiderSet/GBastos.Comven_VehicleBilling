@@ -30,7 +30,7 @@ public sealed class OperationRepository : IOperationRepository
     if (operationId == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador da operação é obrigatório.",
+          "O identificador da operaÃ§Ã£o Ã© obrigatÃ³rio.",
           nameof(operationId));
     }
 
@@ -39,7 +39,7 @@ public sealed class OperationRepository : IOperationRepository
             cancellationToken);
 
     // Primeiro bloqueia o cliente.
-    // O fluxo de criação também bloqueia o cliente,
+    // O fluxo de criaÃ§Ã£o tambÃ©m bloqueia o cliente,
     // portanto ambos seguem a mesma ordem de bloqueio.
     var operationForCustomer = await _dbContext.Operations
         .AsNoTracking()
@@ -54,7 +54,7 @@ public sealed class OperationRepository : IOperationRepository
     if (operationForCustomer is null)
     {
       throw new KeyNotFoundException(
-          "A operação informada não foi encontrada.");
+          "A operaÃ§Ã£o informada nÃ£o foi encontrada.");
     }
 
     var customer = await _dbContext.Customers
@@ -65,10 +65,10 @@ public sealed class OperationRepository : IOperationRepository
     if (customer is null)
     {
       throw new InvalidOperationException(
-          "O cliente da operação não foi encontrado.");
+          "O cliente da operaÃ§Ã£o nÃ£o foi encontrado.");
     }
 
-    // Agora bloqueia a operação dentro da mesma transação.
+    // Agora bloqueia a operaÃ§Ã£o dentro da mesma transaÃ§Ã£o.
     var operation = await _dbContext.Operations
         .FromSqlInterpolated(
             $"SELECT * FROM operations WHERE id = {operationId} FOR UPDATE")
@@ -77,11 +77,11 @@ public sealed class OperationRepository : IOperationRepository
     if (operation is null)
     {
       throw new KeyNotFoundException(
-          "A operação informada não foi encontrada.");
+          "A operaÃ§Ã£o informada nÃ£o foi encontrada.");
     }
 
-    // Idempotência do estorno.
-    // Uma segunda chamada não devolve dinheiro novamente.
+    // IdempotÃªncia do estorno.
+    // Uma segunda chamada nÃ£o devolve dinheiro novamente.
     if (operation.Status == OperationStatus.Refunded)
     {
       var alreadyRefundedDetail =
@@ -99,38 +99,42 @@ public sealed class OperationRepository : IOperationRepository
     if (operation.Status != OperationStatus.Charged)
     {
       throw new InvalidOperationException(
-          "Somente operações cobradas podem ser reembolsadas.");
+          "Somente operaÃ§Ãµes cobradas podem ser reembolsadas.");
     }
 
     if (customer.Plan != CustomerPlan.Prepaid)
     {
       throw new InvalidOperationException(
-          "Somente operações pré-pagas podem ser reembolsadas.");
+          "Somente operaÃ§Ãµes prÃ©-pagas podem ser reembolsadas.");
     }
 
-    var now = DateTimeOffset.UtcNow;
+    var utcNow = DateTime.UtcNow;
+
+    var now = new DateTimeOffset(
+        utcNow.Ticks - (utcNow.Ticks % 10),
+        TimeSpan.Zero);
 
     // Devolve exatamente o valor originalmente cobrado.
     customer.Credit(operation.Amount);
 
-    // Altera o estado da operação.
+    // Altera o estado da operaÃ§Ã£o.
     operation.MarkRefunded(now);
 
-    // Crédito financeiro vinculado à operação.
+    // CrÃ©dito financeiro vinculado Ã  operaÃ§Ã£o.
     var refundLedgerEntry = LedgerEntry.CreateRefundCredit(
         Guid.NewGuid(),
         customer.Id,
         operation.Id,
         operation.Amount,
-        $"Estorno da operação {operation.Type}",
+        $"Estorno da operaÃ§Ã£o {operation.Type}",
         now);
 
     await _dbContext.LedgerEntries.AddAsync(
         refundLedgerEntry,
         cancellationToken);
 
-    // Gera uma única identidade para o evento.
-    // O mesmo GUID será utilizado na Outbox e no payload.
+    // Gera uma Ãºnica identidade para o evento.
+    // O mesmo GUID serÃ¡ utilizado na Outbox e no payload.
     var eventId = Guid.NewGuid();
 
     var eventPayload = JsonSerializer.Serialize(new
@@ -176,13 +180,13 @@ public sealed class OperationRepository : IOperationRepository
     if (command.ExternalOperationId == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador externo da operação é obrigatório.");
+          "O identificador externo da operaÃ§Ã£o Ã© obrigatÃ³rio.");
     }
 
     if (command.CustomerId == Guid.Empty)
     {
       throw new ArgumentException(
-          "O identificador do cliente é obrigatório.");
+          "O identificador do cliente Ã© obrigatÃ³rio.");
     }
 
     if (!Enum.TryParse<OperationType>(
@@ -192,7 +196,7 @@ public sealed class OperationRepository : IOperationRepository
         || !Enum.IsDefined(operationType))
     {
       throw new ArgumentException(
-          "O tipo de operação informado é inválido.");
+          "O tipo de operaÃ§Ã£o informado Ã© invÃ¡lido.");
     }
 
     var amount = Money.Positive(command.Amount);
@@ -216,7 +220,7 @@ public sealed class OperationRepository : IOperationRepository
           await _dbContext.Database.BeginTransactionAsync(
               cancellationToken);
 
-      // Serializa operações concorrentes do mesmo cliente.
+      // Serializa operaÃ§Ãµes concorrentes do mesmo cliente.
       var customer = await _dbContext.Customers
           .FromSqlInterpolated(
               $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
@@ -225,10 +229,10 @@ public sealed class OperationRepository : IOperationRepository
       if (customer is null)
       {
         throw new InvalidOperationException(
-            "O cliente informado não foi encontrado.");
+            "O cliente informado nÃ£o foi encontrado.");
       }
 
-      // Verifica a idempotência dentro da transação.
+      // Verifica a idempotÃªncia dentro da transaÃ§Ã£o.
       var existing = await _dbContext.Operations
           .AsNoTracking()
           .FirstOrDefaultAsync(
@@ -261,8 +265,8 @@ public sealed class OperationRepository : IOperationRepository
 
       if (customer.Plan == CustomerPlan.Prepaid)
       {
-        // O débito será confirmado junto com a operação,
-        // o lançamento financeiro e a mensagem da Outbox.
+        // O dÃ©bito serÃ¡ confirmado junto com a operaÃ§Ã£o,
+        // o lanÃ§amento financeiro e a mensagem da Outbox.
         customer.Debit(amount);
 
         operation.MarkCharged();
@@ -273,7 +277,7 @@ public sealed class OperationRepository : IOperationRepository
             operation.Id,
             amount,
             LedgerEntryType.Debit,
-            $"Cobrança da operação {operationType}",
+            $"CobranÃ§a da operaÃ§Ã£o {operationType}",
             DateTimeOffset.UtcNow);
 
         await _dbContext.LedgerEntries.AddAsync(
@@ -282,21 +286,21 @@ public sealed class OperationRepository : IOperationRepository
       }
       else if (customer.Plan == CustomerPlan.Postpaid)
       {
-        // A operação ficará disponível para o faturamento mensal.
+        // A operaÃ§Ã£o ficarÃ¡ disponÃ­vel para o faturamento mensal.
         operation.MarkAwaitingInvoice();
       }
       else
       {
         throw new InvalidOperationException(
-            "O plano do cliente é inválido.");
+            "O plano do cliente Ã© invÃ¡lido.");
       }
 
       await _dbContext.Operations.AddAsync(
           operation,
           cancellationToken);
 
-      // Gera uma única identidade para o evento.
-      // O mesmo GUID será utilizado na Outbox e no payload.
+      // Gera uma Ãºnica identidade para o evento.
+      // O mesmo GUID serÃ¡ utilizado na Outbox e no payload.
       var eventId = Guid.NewGuid();
 
       var eventPayload = JsonSerializer.Serialize(new
@@ -321,7 +325,7 @@ public sealed class OperationRepository : IOperationRepository
           outboxMessage,
           cancellationToken);
 
-      // Persiste operação, lançamento e Outbox atomicamente.
+      // Persiste operaÃ§Ã£o, lanÃ§amento e Outbox atomicamente.
       await _dbContext.SaveChangesAsync(cancellationToken);
 
       await transaction.CommitAsync(cancellationToken);
@@ -331,11 +335,11 @@ public sealed class OperationRepository : IOperationRepository
     catch (DbUpdateException exception)
         when (IsOperationUniqueViolation(exception))
     {
-      // Descarta o estado local da transação que falhou.
+      // Descarta o estado local da transaÃ§Ã£o que falhou.
       _dbContext.ChangeTracker.Clear();
 
-      // Uma violação do ID externo pode representar uma
-      // requisição concorrente já confirmada.
+      // Uma violaÃ§Ã£o do ID externo pode representar uma
+      // requisiÃ§Ã£o concorrente jÃ¡ confirmada.
       var concurrentOperation = await _dbContext.Operations
           .AsNoTracking()
           .FirstOrDefaultAsync(
@@ -354,16 +358,16 @@ public sealed class OperationRepository : IOperationRepository
         return Map(concurrentOperation);
       }
 
-      // Uma violação do hash sem operação encontrada pelo ID
-      // externo indica reutilização de uma chave de requisição.
+      // Uma violaÃ§Ã£o do hash sem operaÃ§Ã£o encontrada pelo ID
+      // externo indica reutilizaÃ§Ã£o de uma chave de requisiÃ§Ã£o.
       if (IsRequestHashUniqueViolation(exception))
       {
         throw new InvalidOperationException(
-            "Já existe uma operação registrada com os mesmos dados da requisição.",
+            "JÃ¡ existe uma operaÃ§Ã£o registrada com os mesmos dados da requisiÃ§Ã£o.",
             exception);
       }
 
-      // Não transforma outras violações de integridade
+      // NÃ£o transforma outras violaÃ§Ãµes de integridade
       // em respostas idempotentes.
       throw;
     }
@@ -382,35 +386,9 @@ public sealed class OperationRepository : IOperationRepository
     if (operation is null)
       return null;
 
-    var ledgerEntries = await _dbContext.LedgerEntries
-        .AsNoTracking()
-        .Where(entry => entry.OperationId == id)
-        .OrderBy(entry => entry.CreatedAt)
-        .ThenBy(entry => entry.Id)
-        .ToListAsync(cancellationToken);
-
-    var ledgerDtos = ledgerEntries
-        .Select(entry => new OperationLedgerEntryDto(
-            entry.Id,
-            entry.Type.ToString(),
-            entry.Amount.Amount,
-            entry.Description,
-            entry.CreatedAt))
-        .ToList();
-
-    return new OperationDetailDto(
-        operation.Id,
-        operation.ExternalOperationId,
-        
-        operation.CustomerId,
-        operation.Type.ToString(),
-        operation.Amount.Amount,
-        operation.Status.ToString(),
-        operation.CreatedAt,
-        operation.InvoicedAt,
-        operation.RefundedAt,
-        operation.InvoiceId,
-        ledgerDtos);
+    return await BuildOperationDetailAsync(
+        operation,
+        cancellationToken);
   }
 
   public async Task<OperationPagedResult> GetAllAsync(
@@ -442,7 +420,7 @@ public sealed class OperationRepository : IOperationRepository
           || !Enum.IsDefined(parsedType))
       {
         throw new ArgumentException(
-            "O tipo de operação informado é inválido.",
+            "O tipo de operaÃ§Ã£o informado Ã© invÃ¡lido.",
             nameof(operationType));
       }
 
@@ -459,7 +437,7 @@ public sealed class OperationRepository : IOperationRepository
           || !Enum.IsDefined(parsedStatus))
       {
         throw new ArgumentException(
-            "O status da operação informado é inválido.",
+            "O status da operaÃ§Ã£o informado Ã© invÃ¡lido.",
             nameof(status));
       }
 
@@ -523,7 +501,7 @@ public sealed class OperationRepository : IOperationRepository
     if (!sameRequest)
     {
       throw new InvalidOperationException(
-          "O identificador externo já foi utilizado com dados diferentes.");
+          "O identificador externo jÃ¡ foi utilizado com dados diferentes.");
     }
   }
 

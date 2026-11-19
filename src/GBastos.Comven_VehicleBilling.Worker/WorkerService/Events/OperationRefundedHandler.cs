@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Domain.Enums;
 
 namespace Comven_VehicleBilling.WorkerService.Events;
 
@@ -45,14 +46,24 @@ public sealed class OperationRefundedHandler
         if (message is null ||
             message.EventId == Guid.Empty ||
             message.OperationId == Guid.Empty ||
-            message.CustomerId == Guid.Empty ||
             message.ExternalOperationId == Guid.Empty ||
+            message.CustomerId == Guid.Empty ||
             string.IsNullOrWhiteSpace(message.OperationType) ||
             message.Amount <= 0 ||
             message.RefundedAt == default)
         {
             throw new PermanentMessageException(
                 "O payload de OperationRefunded.v1 contém campos obrigatórios inválidos.");
+        }
+
+        if (!Enum.TryParse<OperationType>(
+                message.OperationType,
+                ignoreCase: true,
+                out var eventOperationType) ||
+            !Enum.IsDefined(typeof(OperationType), eventOperationType))
+        {
+            throw new PermanentMessageException(
+                $"Tipo de operação inválido no evento: {message.OperationType}.");
         }
 
         var operation = await _operationRepository.GetByIdAsync(
@@ -73,15 +84,9 @@ public sealed class OperationRefundedHandler
             operation.Id == message.OperationId &&
             operation.ExternalOperationId == message.ExternalOperationId &&
             operation.CustomerId == message.CustomerId &&
-            string.Equals(
-                operation.OperationType,
-                message.OperationType,
-                StringComparison.OrdinalIgnoreCase) &&
+            operation.OperationType == eventOperationType.ToString() &&
             operation.Amount == message.Amount &&
-            string.Equals(
-                operation.Status,
-                "Refunded",
-                StringComparison.OrdinalIgnoreCase) &&
+            operation.Status == OperationStatus.Refunded.ToString() &&
             operation.RefundedAt.HasValue &&
             operation.RefundedAt.Value.UtcDateTime == refundedAtUtc;
 
@@ -100,3 +105,4 @@ public sealed class OperationRefundedHandler
             message.Amount);
     }
 }
+

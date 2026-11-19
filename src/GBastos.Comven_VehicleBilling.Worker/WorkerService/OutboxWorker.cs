@@ -1,4 +1,4 @@
-
+﻿
 using Comven_VehicleBilling.Infrastructure.Mensageria;
 using Comven_VehicleBilling.Infrastructure.Outbox;
 
@@ -6,7 +6,7 @@ namespace Comven_VehicleBilling.Worker.Workers;
 
 public sealed class OutboxWorker : BackgroundService
 {
-    private const int BatchSize = 50;
+    private const int BatchSize = 1;
 
     private static readonly TimeSpan PollingInterval =
         TimeSpan.FromSeconds(15);
@@ -97,7 +97,7 @@ public sealed class OutboxWorker : BackgroundService
 
             var lockId = message.LockId
                 ?? throw new InvalidOperationException(
-                    $"A mensagem {messageId} não possui reserva.");
+                    $"A mensagem {messageId} nÃ£o possui reserva.");
 
             try
             {
@@ -108,7 +108,7 @@ public sealed class OutboxWorker : BackgroundService
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
             {
-                // A reserva será recuperada após expirar.
+                // A reserva serÃ¡ recuperada apÃ³s expirar.
                 throw;
             }
             catch (Exception exception)
@@ -141,8 +141,8 @@ public sealed class OutboxWorker : BackgroundService
                     {
                         _logger.LogWarning(
                             exception,
-                            "A falha da mensagem {MessageId} não foi registrada: " +
-                            "a reserva expirou ou foi substituída.",
+                            "A falha da mensagem {MessageId} nÃ£o foi registrada: " +
+                            "a reserva expirou ou foi substituÃ­da.",
                             messageId);
                     }
                 }
@@ -155,17 +155,17 @@ public sealed class OutboxWorker : BackgroundService
                 {
                     _logger.LogError(
                         persistenceException,
-                        "Não foi possível registrar a falha da mensagem {MessageId}.",
+                        "NÃ£o foi possÃ­vel registrar a falha da mensagem {MessageId}.",
                         messageId);
                 }
 
                 // ESSENCIAL:
-                // Não marcar como processada uma mensagem cuja publicação falhou.
+                // NÃ£o marcar como processada uma mensagem cuja publicaÃ§Ã£o falhou.
                 continue;
             }
 
-            // Só chegamos aqui quando PublishAsync terminou com sucesso,
-            // incluindo a confirmação de publicação do RabbitMQ.
+            // SÃ³ chegamos aqui quando PublishAsync terminou com sucesso,
+            // incluindo a confirmaÃ§Ã£o de publicaÃ§Ã£o do RabbitMQ.
             try
             {
                 var registered = await repository.MarkAsProcessedAsync(
@@ -182,8 +182,8 @@ public sealed class OutboxWorker : BackgroundService
                 else
                 {
                     _logger.LogError(
-                        "A publicação da mensagem {MessageId} foi concluída, " +
-                        "mas a reserva não era mais válida. A mensagem poderá " +
+                        "A publicaÃ§Ã£o da mensagem {MessageId} foi concluÃ­da, " +
+                        "mas a reserva nÃ£o era mais vÃ¡lida. A mensagem poderÃ¡ " +
                         "ser publicada novamente.",
                         messageId);
                 }
@@ -191,19 +191,20 @@ public sealed class OutboxWorker : BackgroundService
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
             {
-                // A publicação pode ter sido confirmada.
-                // Não presumir que ela deixou de ser entregue.
+                // A publicaÃ§Ã£o pode ter sido confirmada.
+                // NÃ£o presumir que ela deixou de ser entregue.
                 throw;
             }
             catch (Exception exception)
             {
                 _logger.LogError(
                     exception,
-                    "A publicação da mensagem {MessageId} foi concluída, " +
-                    "mas não foi possível registrar a conclusão na Outbox. " +
-                    "A mensagem poderá ser publicada novamente.",
+                    "A publicaÃ§Ã£o da mensagem {MessageId} foi concluÃ­da, " +
+                    "mas nÃ£o foi possÃ­vel registrar a conclusÃ£o na Outbox. " +
+                    "A mensagem poderÃ¡ ser publicada novamente.",
                     messageId);
             }
         }
     }
 }
+

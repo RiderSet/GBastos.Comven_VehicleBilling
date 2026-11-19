@@ -660,9 +660,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
       catch (Exception exception)
       {
-        _logger.LogDebug(
-            exception,
-            "Erro ao fechar canal de consumo RabbitMQ.");
+        _logger.LogDebug(exception, "Erro ao fechar canal de consumo RabbitMQ.");
       }
       finally
       {
@@ -682,9 +680,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
       catch (Exception exception)
       {
-        _logger.LogDebug(
-            exception,
-            "Erro ao fechar canal de publicação RabbitMQ.");
+        _logger.LogDebug(exception, "Erro ao fechar canal de publicação RabbitMQ.");
       }
       finally
       {
@@ -704,9 +700,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
       catch (Exception exception)
       {
-        _logger.LogDebug(
-            exception,
-            "Erro ao fechar conexão RabbitMQ.");
+        _logger.LogDebug(exception, "Erro ao fechar conexão RabbitMQ.");
       }
       finally
       {
@@ -714,4 +708,5 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
     }
   }
+
 }
