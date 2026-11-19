@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Infrastructure.Inbox;
+using Comven_VehicleBilling.Infrastructure.Inbox;
 using Comven_VehicleBilling.WorkerService.Events;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -441,6 +441,20 @@ public sealed class RabbitMqConsumer : BackgroundService
     }
 
     // 5. Seleciona a prÃ³xima fila de retry.
+    if (retryCount >= _options.RetryQueues.Count)
+    {
+      _logger.LogError(
+          "Mensagem {MessageId} não possui fila de retry configurada para a tentativa {RetryCount}. Encaminhando para DLQ.",
+          messageId,
+          retryCount);
+
+      await RejectMessageAsync(
+          consumerChannel,
+          args.DeliveryTag);
+
+      return;
+    }
+
     var retry = _options.RetryQueues[retryCount];
 
     try
@@ -544,21 +558,31 @@ public sealed class RabbitMqConsumer : BackgroundService
       return 0;
     }
 
-    return value switch
+    var retryCount = value switch
     {
-      byte number when number <= _options.MaxRetryAttempts => number,
+      byte number => number,
 
-      short number when number >= 0 &&
-                        number <= _options.MaxRetryAttempts => number,
+      short number when number >= 0 => number,
 
-      int number when number >= 0 &&
-                      number <= _options.MaxRetryAttempts => number,
+      int number when number >= 0 => number,
 
-      long number when number >= 0 &&
-                       number <= _options.MaxRetryAttempts => (int)number,
+      long number when number >= 0 && number <= int.MaxValue
+          => (int)number,
+
+      string text when int.TryParse(text, out var number) && number >= 0
+          => number,
+
+      byte[] bytes when int.TryParse(
+          System.Text.Encoding.UTF8.GetString(bytes),
+          out var number) && number >= 0
+          => number,
 
       _ => _options.MaxRetryAttempts
     };
+
+    return Math.Min(
+        retryCount,
+        _options.MaxRetryAttempts);
   }
 
   private static void ValidateEventId(
