@@ -26,7 +26,7 @@ var envFile = FindEnvFile();
 if (envFile is null)
 {
     throw new FileNotFoundException(
-        "Arquivo .env nÃ£o encontrado na raiz do repositÃ³rio.");
+        "Arquivo .env nÃƒÂ£o encontrado na raiz do repositÃƒÂ³rio.");
 }
 
 DotNetEnv.Env.Load(envFile);
@@ -40,7 +40,7 @@ builder.Configuration
         reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// Registra PostgreSQL, repositÃ³rio da Outbox e RabbitMQ.
+// Registra PostgreSQL, repositÃƒÂ³rio da Outbox e RabbitMQ.
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Handlers e consumidores de mensagens.
@@ -49,11 +49,17 @@ builder.Services.AddScoped<OperationRefundedHandler>();
 builder.Services.AddScoped<InvoiceCreatedHandler>();
 builder.Services.AddScoped<SupplementaryInvoiceCreatedHandler>();
 
-// Publica eventos da Outbox e consome eventos com Inbox/idempotÃªncia.
+// Configurações centralizadas do consumidor RabbitMQ.
+builder.Services.AddSingleton<RabbitMqConsumerOptions>(serviceProvider =>
+    RabbitMqConsumerOptions.FromConfiguration(
+        serviceProvider.GetRequiredService<IConfiguration>()));
+// Publica eventos da Outbox e consome eventos com Inbox/idempotÃƒÂªncia.
 builder.Services.AddHostedService<OutboxWorker>();
 builder.Services.AddHostedService<RabbitMqConsumer>();
 
 var host = builder.Build();
 
 await host.RunAsync();
+
+
 

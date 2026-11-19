@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Infrastructure\Comven_VehicleBilling.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\GBastos.Comven_VehicleBilling.Worker\WorkerService\Comven_VehicleBilling.WorkerService.csproj" />
   </ItemGroup>
 
 </Project>

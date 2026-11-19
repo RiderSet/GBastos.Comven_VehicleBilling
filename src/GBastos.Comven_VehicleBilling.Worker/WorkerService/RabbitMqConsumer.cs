@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Infrastructure.Inbox;
+﻿using Comven_VehicleBilling.Infrastructure.Inbox;
 using Comven_VehicleBilling.WorkerService.Events;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -8,26 +8,8 @@ namespace Comven_VehicleBilling.WorkerService;
 
 public sealed class RabbitMqConsumer : BackgroundService
 {
-  private const string QueueName = "vehicle-billing-events";
-  private const string ConsumerName = "vehicle-billing-worker";
 
-  private const int MaxRetryAttempts = 3;
-  private const string RetryHeader = "x-retry-count";
-
-  private const string DeadLetterExchange = "vehicle-billing.dlx";
-  private const string DeadLetterQueue = "vehicle-billing-events.dlq";
-
-  private static readonly TimeSpan ReconnectInterval =
-      TimeSpan.FromSeconds(10);
-
-  private static readonly (string QueueName, int TtlMilliseconds)[]
-      RetryQueues =
-      [
-          ("vehicle-billing-events.retry.5s", 5_000),
-            ("vehicle-billing-events.retry.30s", 30_000),
-            ("vehicle-billing-events.retry.120s", 120_000)
-      ];
-
+  private readonly RabbitMqConsumerOptions _options;
   private readonly IServiceScopeFactory _scopeFactory;
   private readonly ILogger<RabbitMqConsumer> _logger;
 
@@ -37,10 +19,12 @@ public sealed class RabbitMqConsumer : BackgroundService
 
   public RabbitMqConsumer(
       IServiceScopeFactory scopeFactory,
-      ILogger<RabbitMqConsumer> logger)
+      ILogger<RabbitMqConsumer> logger,
+      RabbitMqConsumerOptions options)
   {
     _scopeFactory = scopeFactory;
     _logger = logger;
+    _options = options;
   }
 
   protected override async Task ExecuteAsync(
@@ -59,15 +43,15 @@ public sealed class RabbitMqConsumer : BackgroundService
             await ProcessMessageAsync(args, stoppingToken);
 
         await _consumerChannel!.BasicConsumeAsync(
-            queue: QueueName,
+            queue: _options.QueueName,
             autoAck: false,
             consumer: consumer,
             cancellationToken: stoppingToken);
 
         _logger.LogInformation(
             "Consumer {ConsumerName} aguardando mensagens na fila {QueueName}.",
-            ConsumerName,
-            QueueName);
+            _options.ConsumerName,
+            _options.QueueName);
 
         while (!stoppingToken.IsCancellationRequested &&
                _connection?.IsOpen == true &&
@@ -82,7 +66,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         if (!stoppingToken.IsCancellationRequested)
         {
           _logger.LogWarning(
-              "Conexão ou canal RabbitMQ indisponível. Nova conexão será estabelecida.");
+              "ConexÃ£o ou canal RabbitMQ indisponÃ­vel. Nova conexÃ£o serÃ¡ estabelecida.");
         }
       }
       catch (OperationCanceledException)
@@ -95,7 +79,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         _logger.LogError(
             exception,
             "Falha no Consumer RabbitMQ. Nova tentativa em {IntervalSeconds} segundos.",
-            ReconnectInterval.TotalSeconds);
+            _options.ReconnectIntervalSeconds);
       }
       finally
       {
@@ -107,7 +91,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         try
         {
           await Task.Delay(
-              ReconnectInterval,
+              TimeSpan.FromSeconds(_options.ReconnectIntervalSeconds),
               stoppingToken);
         }
         catch (OperationCanceledException)
@@ -125,11 +109,11 @@ public sealed class RabbitMqConsumer : BackgroundService
   private async Task ConnectAsync(
       CancellationToken cancellationToken)
   {
-    var user = Environment.GetEnvironmentVariable("RABBITMQ_USER");
-    var password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
-    var host = Environment.GetEnvironmentVariable("RABBITMQ_HOST");
-    var virtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST");
-    var portValue = Environment.GetEnvironmentVariable("RABBITMQ_PORT");
+    var user = _options.UserName;
+    var password = _options.Password;
+    var host = _options.HostName;
+    var virtualHost = _options.VirtualHost;
+    var port = _options.Port;
 
     if (string.IsNullOrWhiteSpace(user) ||
         string.IsNullOrWhiteSpace(password) ||
@@ -138,12 +122,10 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       throw new InvalidOperationException(
           "Configure RABBITMQ_USER, RABBITMQ_PASSWORD, " +
-          "RABBITMQ_HOST e RABBITMQ_VHOST nas variáveis de ambiente.");
+          "RABBITMQ_HOST e RABBITMQ_VHOST nas variÃ¡veis de ambiente.");
     }
 
-    var port = int.TryParse(portValue, out var parsedPort)
-        ? parsedPort
-        : 5672;
+
 
     if (port is < 1 or > 65535)
     {
@@ -184,8 +166,8 @@ public sealed class RabbitMqConsumer : BackgroundService
         cancellationToken: cancellationToken);
 
     _logger.LogInformation(
-        "Conexão RabbitMQ estabelecida. Fila principal: {QueueName}.",
-        QueueName);
+        "ConexÃ£o RabbitMQ estabelecida. Fila principal: {QueueName}.",
+        _options.QueueName);
   }
 
   private async Task DeclareTopologyAsync(
@@ -194,7 +176,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     var channel = _consumerChannel!;
 
     await channel.ExchangeDeclareAsync(
-        exchange: DeadLetterExchange,
+        exchange: _options.DeadLetterExchange,
         type: ExchangeType.Fanout,
         durable: true,
         autoDelete: false,
@@ -202,7 +184,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         cancellationToken: cancellationToken);
 
     await channel.QueueDeclareAsync(
-        queue: DeadLetterQueue,
+        queue: _options.DeadLetterQueue,
         durable: true,
         exclusive: false,
         autoDelete: false,
@@ -210,19 +192,19 @@ public sealed class RabbitMqConsumer : BackgroundService
         cancellationToken: cancellationToken);
 
     await channel.QueueBindAsync(
-        queue: DeadLetterQueue,
-        exchange: DeadLetterExchange,
+        queue: _options.DeadLetterQueue,
+        exchange: _options.DeadLetterExchange,
         routingKey: string.Empty,
         arguments: null,
         cancellationToken: cancellationToken);
 
     var mainQueueArguments = new Dictionary<string, object?>
     {
-      ["x-dead-letter-exchange"] = DeadLetterExchange
+      ["x-dead-letter-exchange"] = _options.DeadLetterExchange
     };
 
     await channel.QueueDeclareAsync(
-        queue: QueueName,
+        queue: _options.QueueName,
         durable: true,
         exclusive: false,
         autoDelete: false,
@@ -235,13 +217,13 @@ public sealed class RabbitMqConsumer : BackgroundService
   private async Task DeclareRetryQueuesAsync(
       CancellationToken cancellationToken)
   {
-    foreach (var retry in RetryQueues)
+    foreach (var retry in _options.RetryQueues)
     {
       var arguments = new Dictionary<string, object?>
       {
         ["x-message-ttl"] = retry.TtlMilliseconds,
         ["x-dead-letter-exchange"] = string.Empty,
-        ["x-dead-letter-routing-key"] = QueueName
+        ["x-dead-letter-routing-key"] = _options.QueueName
       };
 
       await _consumerChannel!.QueueDeclareAsync(
@@ -273,7 +255,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     if (messageId == Guid.Empty)
     {
       _logger.LogError(
-          "Mensagem sem MessageId GUID válido. DeliveryTag={DeliveryTag}.",
+          "Mensagem sem MessageId GUID vÃ¡lido. DeliveryTag={DeliveryTag}.",
           args.DeliveryTag);
 
       await RejectMessageAsync(channel, args.DeliveryTag);
@@ -300,7 +282,7 @@ public sealed class RabbitMqConsumer : BackgroundService
 
       var registered = await inbox.TryRegisterAsync(
           messageId,
-          ConsumerName,
+          _options.ConsumerName,
           cancellationToken);
 
       if (registered)
@@ -335,7 +317,7 @@ public sealed class RabbitMqConsumer : BackgroundService
 
           default:
             throw new PermanentMessageException(
-                $"Tipo de mensagem não suportado: {messageType ?? "(vazio)"}.");
+                $"Tipo de mensagem nÃ£o suportado: {messageType ?? "(vazio)"}.");
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -347,7 +329,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       else
       {
         _logger.LogInformation(
-            "Mensagem {MessageId} já consta na Inbox. Nenhum efeito será repetido.",
+            "Mensagem {MessageId} jÃ¡ consta na Inbox. Nenhum efeito serÃ¡ repetido.",
             messageId);
       }
 
@@ -362,7 +344,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Mensagem {MessageId} rejeitada por conteúdo inválido.",
+          "Mensagem {MessageId} rejeitada por conteÃºdo invÃ¡lido.",
           messageId);
 
       await RejectMessageAsync(channel, args.DeliveryTag);
@@ -384,7 +366,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       if (!channel.IsOpen)
       {
         _logger.LogWarning(
-            "PostgreSQL confirmou {MessageId}, mas o canal RabbitMQ está fechado. A mensagem poderá ser reentregue.",
+            "PostgreSQL confirmou {MessageId}, mas o canal RabbitMQ estÃ¡ fechado. A mensagem poderÃ¡ ser reentregue.",
             messageId);
 
         return;
@@ -396,14 +378,14 @@ public sealed class RabbitMqConsumer : BackgroundService
           cancellationToken: CancellationToken.None);
 
       _logger.LogInformation(
-          "Mensagem {MessageId} confirmada no RabbitMQ após commit PostgreSQL.",
+          "Mensagem {MessageId} confirmada no RabbitMQ apÃ³s commit PostgreSQL.",
           messageId);
     }
     catch (Exception exception)
     {
       _logger.LogError(
           exception,
-          "Falha ao confirmar mensagem {MessageId} após COMMIT PostgreSQL. O canal será encerrado para permitir a reentrega.",
+          "Falha ao confirmar mensagem {MessageId} apÃ³s COMMIT PostgreSQL. O canal serÃ¡ encerrado para permitir a reentrega.",
           messageId);
 
       await CloseConsumerChannelForRedeliveryAsync();
@@ -417,26 +399,39 @@ public sealed class RabbitMqConsumer : BackgroundService
     var consumerChannel = _consumerChannel;
     var publisherChannel = _publisherChannel;
 
-    if (consumerChannel is null ||
-        publisherChannel is null ||
-        !consumerChannel.IsOpen ||
-        !publisherChannel.IsOpen)
+    // 1. Verifica o canal consumidor.
+    if (consumerChannel is null || !consumerChannel.IsOpen)
     {
       _logger.LogWarning(
-          "Não foi possível encaminhar {MessageId} para retry. Os canais RabbitMQ estão indisponíveis.",
+          "Canal consumidor indisponÃ­vel para processar retry de {MessageId}. A mensagem serÃ¡ recuperada pelo RabbitMQ.",
           messageId);
 
       return;
     }
 
+    // 2. Se o publicador estiver indisponÃ­vel,
+    // fecha o consumidor para provocar a reentrega.
+    if (publisherChannel is null || !publisherChannel.IsOpen)
+    {
+      _logger.LogWarning(
+          "Canal publicador indisponÃ­vel para retry de {MessageId}. " +
+          "Fechando canal consumidor para permitir reentrega.",
+          messageId);
+
+      await CloseConsumerChannelForRedeliveryAsync();
+      return;
+    }
+
+    // 3. Recupera o nÃºmero de tentativas.
     var retryCount = GetRetryCount(args);
 
-    if (retryCount >= MaxRetryAttempts)
+    // 4. Esgotamento das tentativas: encaminha para DLQ.
+    if (retryCount >= _options.MaxRetryAttempts)
     {
       _logger.LogError(
           "Mensagem {MessageId} esgotou as {MaxAttempts} tentativas. Encaminhando para DLQ.",
           messageId,
-          MaxRetryAttempts);
+          _options.MaxRetryAttempts);
 
       await RejectMessageAsync(
           consumerChannel,
@@ -445,16 +440,19 @@ public sealed class RabbitMqConsumer : BackgroundService
       return;
     }
 
-    var retry = RetryQueues[retryCount];
+    // 5. Seleciona a prÃ³xima fila de retry.
+    var retry = _options.RetryQueues[retryCount];
 
     try
     {
+      // 6. Preserva os headers originais.
       var headers = args.BasicProperties.Headers is { } originalHeaders
           ? new Dictionary<string, object?>(originalHeaders)
           : new Dictionary<string, object?>();
 
-      headers[RetryHeader] = retryCount + 1;
+      headers[_options.RetryHeader] = retryCount + 1;
 
+      // 7. Preserva as propriedades da mensagem.
       var properties = new BasicProperties
       {
         MessageId = args.BasicProperties.MessageId,
@@ -466,6 +464,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         Headers = headers
       };
 
+      // 8. Publica primeiro. Publisher Confirms estÃ¡ habilitado.
       await publisherChannel.BasicPublishAsync(
           exchange: string.Empty,
           routingKey: retry.QueueName,
@@ -478,13 +477,14 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Falha ao publicar retry de {MessageId}. O canal será fechado para permitir reentrega.",
+          "Falha ao publicar retry de {MessageId}. O canal serÃ¡ fechado para permitir reentrega.",
           messageId);
 
       await CloseConsumerChannelForRedeliveryAsync();
       return;
     }
 
+    // 9. Somente apÃ³s publicaÃ§Ã£o confirmada executa ACK original.
     try
     {
       await consumerChannel.BasicAckAsync(
@@ -497,14 +497,14 @@ public sealed class RabbitMqConsumer : BackgroundService
           messageId,
           retry.QueueName,
           retryCount + 1,
-          MaxRetryAttempts,
+          _options.MaxRetryAttempts,
           retry.TtlMilliseconds / 1000);
     }
     catch (Exception exception)
     {
       _logger.LogError(
           exception,
-          "Retry publicado para {MessageId}, mas o ACK da mensagem original falhou. O canal será encerrado para permitir a reentrega. A Inbox protegerá contra efeitos duplicados.",
+          "Retry publicado para {MessageId}, mas o ACK da mensagem original falhou. Fechando canal para permitir reentrega. A Inbox protegerÃ¡ contra efeitos duplicados.",
           messageId);
 
       await CloseConsumerChannelForRedeliveryAsync();
@@ -524,7 +524,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         await channel.CloseAsync();
 
       _logger.LogWarning(
-          "Canal de consumo fechado. Mensagens sem ACK poderão ser reentregues pelo RabbitMQ.");
+          "Canal de consumo fechado. Mensagens sem ACK poderÃ£o ser reentregues pelo RabbitMQ.");
     }
     catch (Exception exception)
     {
@@ -539,25 +539,25 @@ public sealed class RabbitMqConsumer : BackgroundService
     var headers = args.BasicProperties.Headers;
 
     if (headers is null ||
-        !headers.TryGetValue(RetryHeader, out var value))
+        !headers.TryGetValue(_options.RetryHeader, out var value))
     {
       return 0;
     }
 
     return value switch
     {
-      byte number when number <= MaxRetryAttempts => number,
+      byte number when number <= _options.MaxRetryAttempts => number,
 
       short number when number >= 0 &&
-                        number <= MaxRetryAttempts => number,
+                        number <= _options.MaxRetryAttempts => number,
 
       int number when number >= 0 &&
-                      number <= MaxRetryAttempts => number,
+                      number <= _options.MaxRetryAttempts => number,
 
       long number when number >= 0 &&
-                       number <= MaxRetryAttempts => (int)number,
+                       number <= _options.MaxRetryAttempts => (int)number,
 
-      _ => MaxRetryAttempts
+      _ => _options.MaxRetryAttempts
     };
   }
 
@@ -589,7 +589,7 @@ public sealed class RabbitMqConsumer : BackgroundService
               out var eventId))
       {
         throw new PermanentMessageException(
-            "EventId do payload não é um GUID válido.");
+            "EventId do payload nÃ£o Ã© um GUID vÃ¡lido.");
       }
 
       if (eventId != messageId)
@@ -601,7 +601,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     catch (JsonException exception)
     {
       throw new PermanentMessageException(
-          "Payload JSON inválido.",
+          "Payload JSON invÃ¡lido.",
           exception);
     }
   }
@@ -639,7 +639,7 @@ public sealed class RabbitMqConsumer : BackgroundService
     {
       _logger.LogError(
           exception,
-          "Falha ao rejeitar mensagem {DeliveryTag}. O canal será encerrado para permitir reentrega.",
+          "Falha ao rejeitar mensagem {DeliveryTag}. O canal serÃ¡ encerrado para permitir reentrega.",
           deliveryTag);
 
       await CloseConsumerChannelForRedeliveryAsync();
@@ -680,7 +680,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
       catch (Exception exception)
       {
-        _logger.LogDebug(exception, "Erro ao fechar canal de publicação RabbitMQ.");
+        _logger.LogDebug(exception, "Erro ao fechar canal de publicaÃ§Ã£o RabbitMQ.");
       }
       finally
       {
@@ -700,7 +700,7 @@ public sealed class RabbitMqConsumer : BackgroundService
       }
       catch (Exception exception)
       {
-        _logger.LogDebug(exception, "Erro ao fechar conexão RabbitMQ.");
+        _logger.LogDebug(exception, "Erro ao fechar conexÃ£o RabbitMQ.");
       }
       finally
       {
@@ -710,3 +710,9 @@ public sealed class RabbitMqConsumer : BackgroundService
   }
 
 }
+
+
+
+
+
+
