@@ -14,37 +14,14 @@ internal static class InvoiceScenarios
     PropertyNameCaseInsensitive = true
   };
 
-  public static async Task<Guid?> CreateAsync(
+  public static async Task<Guid?> RegisterAsync(
       VehicleBillingApiClient apiClient)
   {
     Console.WriteLine();
     Console.WriteLine("======================================");
-    Console.WriteLine(" CENÁRIO: FATURAMENTO PÓS-PAGO");
+    Console.WriteLine(" CENÃRIO: FATURAMENTO PÃ“S-PAGO");
     Console.WriteLine("======================================");
     Console.WriteLine();
-
-    Console.Write(
-        "Informe o mês de referência (yyyy-MM): ");
-
-    var input = Console.ReadLine();
-
-    if (!DateOnly.TryParseExact(
-            input,
-            "yyyy-MM",
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None,
-            out var referenceDate))
-    {
-      Console.WriteLine(
-          "Mês de referência inválido. Utilize yyyy-MM.");
-
-      return null;
-    }
-
-    referenceDate = new DateOnly(
-        referenceDate.Year,
-        referenceDate.Month,
-        1);
 
     var email =
         $"simulador-postpaid-{Guid.NewGuid():N}@comven.com.br";
@@ -53,11 +30,11 @@ internal static class InvoiceScenarios
         $"SIM{Guid.NewGuid():N}"[..14];
 
     Console.WriteLine();
-    Console.WriteLine("Criando cliente pós-pago...");
+    Console.WriteLine("Criando cliente pÃ³s-pago...");
 
     using var customerResponse =
         await apiClient.CreateCustomerAsync(
-            "Cliente Simulador Pós-Pago",
+            "Cliente Simulador PÃ³s-Pago",
             document,
             email,
             plan: "Postpaid");
@@ -68,7 +45,7 @@ internal static class InvoiceScenarios
     if (!customerResponse.IsSuccessStatusCode)
     {
       Console.WriteLine(
-          "Não foi possível criar o cliente.");
+          "NÃ£o foi possÃ­vel criar o cliente.");
 
       Console.WriteLine(customerBody);
       return null;
@@ -82,7 +59,7 @@ internal static class InvoiceScenarios
     if (customer is null || customer.Id == Guid.Empty)
     {
       Console.WriteLine(
-          "Resposta inválida ao criar o cliente.");
+          "Resposta invÃ¡lida ao criar o cliente.");
 
       Console.WriteLine(customerBody);
       return null;
@@ -92,7 +69,7 @@ internal static class InvoiceScenarios
     Console.WriteLine("Plano: Postpaid");
 
     Console.WriteLine();
-    Console.WriteLine("Registrando operação pós-paga...");
+    Console.WriteLine("Registrando operaÃ§Ã£o pÃ³s-paga...");
 
     var operationRequest = new CreateOperationRequest(
         Guid.NewGuid(),
@@ -107,96 +84,93 @@ internal static class InvoiceScenarios
         await operationResponse.Content.ReadAsStringAsync();
 
     Console.WriteLine(
-        $"HTTP operação: {(int)operationResponse.StatusCode} " +
+        $"HTTP operaÃ§Ã£o: {(int)operationResponse.StatusCode} " +
         operationResponse.StatusCode);
 
     if (!operationResponse.IsSuccessStatusCode)
     {
       Console.WriteLine(
-          "Não foi possível registrar a operação.");
+          "NÃ£o foi possÃ­vel registrar a operaÃ§Ã£o.");
 
       Console.WriteLine(operationBody);
       return null;
     }
 
-    Console.WriteLine("Operação registrada.");
+    Console.WriteLine("OperaÃ§Ã£o registrada.");
     Console.WriteLine(operationBody);
 
     Console.WriteLine();
-    Console.WriteLine("Gerando fatura...");
+    Console.WriteLine("Registro da operacao concluido.");
+    Console.WriteLine($"CustomerId para faturamento futuro: {customer.Id}");
+    Console.WriteLine();
+    Console.WriteLine("Guarde esse CustomerId. Utilize a opcao 5 apos o fechamento do mes.");
+
+    return customer.Id;
+  }
+
+  public static async Task<Guid?> GenerateAsync(
+      VehicleBillingApiClient apiClient)
+  {
+    Console.WriteLine();
+    Console.WriteLine("======================================");
+    Console.WriteLine(" GERAR FATURA POS-PAGA");
+    Console.WriteLine("======================================");
+    Console.WriteLine();
+
+    Console.Write("Informe o CustomerId: ");
+
+    if (!Guid.TryParse(Console.ReadLine(), out var customerId) ||
+        customerId == Guid.Empty)
+    {
+      Console.WriteLine("CustomerId invalido.");
+      return null;
+    }
+
+    Console.Write("Informe o mes de referencia (yyyy-MM): ");
+
+    var input = Console.ReadLine();
+
+    if (!DateOnly.TryParseExact(
+            input,
+            "yyyy-MM",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var referenceDate))
+    {
+      Console.WriteLine("Mes de referencia invalido. Utilize yyyy-MM.");
+      return null;
+    }
+
+    referenceDate = new DateOnly(
+        referenceDate.Year,
+        referenceDate.Month,
+        1);
 
     var generationId = Guid.NewGuid();
 
+    Console.WriteLine();
+    Console.WriteLine($"CustomerId: {customerId}");
+    Console.WriteLine($"Referencia: {referenceDate:yyyy-MM}");
     Console.WriteLine($"GenerationId: {generationId}");
+    Console.WriteLine();
+    Console.WriteLine("Gerando fatura...");
 
     using var invoiceResponse =
         await apiClient.CreateInvoiceAsync(
-            customer.Id,
+            customerId,
             referenceDate,
             generationId);
 
     var invoiceBody =
         await invoiceResponse.Content.ReadAsStringAsync();
 
-    Console.WriteLine();
     Console.WriteLine(
         $"HTTP fatura: {(int)invoiceResponse.StatusCode} " +
         invoiceResponse.StatusCode);
 
-    if (invoiceResponse.StatusCode == HttpStatusCode.BadRequest)
-    {
-      try
-      {
-        using var errorDocument =
-            JsonDocument.Parse(invoiceBody);
-
-        var detail =
-            errorDocument.RootElement
-                .TryGetProperty("detail", out var detailElement)
-                ? detailElement.GetString()
-                : null;
-
-        if (!string.IsNullOrWhiteSpace(detail) &&
-            detail.Contains(
-                "ainda não pode gerar",
-                StringComparison.OrdinalIgnoreCase))
-        {
-          Console.WriteLine();
-          Console.WriteLine("PERÍODO AINDA ABERTO");
-          Console.WriteLine(
-              "--------------------------------------");
-
-          Console.WriteLine(
-              $"Referência: {referenceDate:yyyy-MM}");
-
-          Console.WriteLine(
-              "A API recusou corretamente a geração " +
-              "porque o período ainda não está fechado.");
-
-          Console.WriteLine();
-          Console.WriteLine(
-              "A operação permanece aguardando faturamento.");
-
-          return null;
-        }
-      }
-      catch (JsonException)
-      {
-        // Mantém o tratamento genérico abaixo.
-      }
-
-      Console.WriteLine(
-          "Não foi possível gerar a fatura.");
-
-      Console.WriteLine(invoiceBody);
-      return null;
-    }
-
     if (!invoiceResponse.IsSuccessStatusCode)
     {
-      Console.WriteLine(
-          "Não foi possível gerar a fatura.");
-
+      Console.WriteLine("Nao foi possivel gerar a fatura.");
       Console.WriteLine(invoiceBody);
       return null;
     }
@@ -206,11 +180,9 @@ internal static class InvoiceScenarios
             invoiceBody,
             JsonOptions);
 
-    if (invoice is null)
+    if (invoice is null || invoice.Id == Guid.Empty)
     {
-      Console.WriteLine(
-          "Resposta da API não contém uma fatura válida.");
-
+      Console.WriteLine("Resposta invalida ao gerar a fatura.");
       Console.WriteLine(invoiceBody);
       return null;
     }
@@ -221,7 +193,7 @@ internal static class InvoiceScenarios
     Console.WriteLine($"ID:           {invoice.Id}");
     Console.WriteLine($"Cliente:      {invoice.CustomerId}");
     Console.WriteLine(
-        $"Período:      {invoice.PeriodStart:yyyy-MM-dd} até " +
+        $"Periodo:      {invoice.PeriodStart:yyyy-MM-dd} ate " +
         $"{invoice.PeriodEnd:yyyy-MM-dd}");
     Console.WriteLine($"Valor:        R$ {invoice.Amount:N2}");
     Console.WriteLine($"Status:       {invoice.Status}");
@@ -229,13 +201,13 @@ internal static class InvoiceScenarios
         $"Criada em:    {invoice.CreatedAt:dd/MM/yyyy HH:mm:ss}");
 
     Console.WriteLine();
-    Console.WriteLine("Testando idempotência da geração...");
+    Console.WriteLine("Testando idempotencia da geracao...");
 
     var secondGenerationId = Guid.NewGuid();
 
     using var secondInvoiceResponse =
         await apiClient.CreateInvoiceAsync(
-            customer.Id,
+            customerId,
             referenceDate,
             secondGenerationId);
 
@@ -243,14 +215,12 @@ internal static class InvoiceScenarios
         await secondInvoiceResponse.Content.ReadAsStringAsync();
 
     Console.WriteLine(
-        $"Segunda geração: {(int)secondInvoiceResponse.StatusCode} " +
+        $"Segunda geracao: {(int)secondInvoiceResponse.StatusCode} " +
         secondInvoiceResponse.StatusCode);
 
     if (!secondInvoiceResponse.IsSuccessStatusCode)
     {
-      Console.WriteLine(
-          "A segunda tentativa de geração falhou.");
-
+      Console.WriteLine("A segunda tentativa de geracao falhou.");
       Console.WriteLine(secondInvoiceBody);
       return null;
     }
@@ -260,39 +230,21 @@ internal static class InvoiceScenarios
             secondInvoiceBody,
             JsonOptions);
 
-    if (secondInvoice is null)
+    if (secondInvoice is null || secondInvoice.Id != invoice.Id)
     {
       Console.WriteLine(
-          "Resposta inválida na segunda geração.");
+          "FALHA DE IDEMPOTENCIA: a segunda tentativa nao retornou a mesma fatura.");
 
       Console.WriteLine(secondInvoiceBody);
       return null;
     }
 
-    if (secondInvoice.Id != invoice.Id)
-    {
-      Console.WriteLine(
-          "FALHA DE IDEMPOTÊNCIA: a segunda tentativa " +
-          "gerou outra fatura.");
-
-      Console.WriteLine($"Primeira fatura: {invoice.Id}");
-      Console.WriteLine($"Segunda fatura:  {secondInvoice.Id}");
-
-      return null;
-    }
-
     Console.WriteLine(
-        "Idempotência confirmada: a segunda tentativa " +
-        "retornou a mesma fatura.");
+        "Idempotencia confirmada: a segunda tentativa retornou a mesma fatura.");
 
     Console.WriteLine();
-    Console.WriteLine("======================================");
-    Console.WriteLine(" FATURAMENTO CONCLUÍDO COM SUCESSO");
-    Console.WriteLine("======================================");
-    Console.WriteLine();
-
-    Console.WriteLine(
-        "Guarde o ID da fatura para o cenário 4.");
+    Console.WriteLine("FATURAMENTO CONCLUIDO COM SUCESSO");
+    Console.WriteLine($"Guarde o ID da fatura: {invoice.Id}");
 
     return invoice.Id;
   }
@@ -313,7 +265,7 @@ internal static class InvoiceScenarios
             out var invoiceId) ||
         invoiceId == Guid.Empty)
     {
-      Console.WriteLine("ID da fatura inválido.");
+      Console.WriteLine("ID da fatura invÃ¡lido.");
       return;
     }
 
@@ -326,7 +278,7 @@ internal static class InvoiceScenarios
 
     if (response.StatusCode == HttpStatusCode.NotFound)
     {
-      Console.WriteLine("Fatura não encontrada.");
+      Console.WriteLine("Fatura nÃ£o encontrada.");
       return;
     }
 
@@ -345,7 +297,7 @@ internal static class InvoiceScenarios
 
     if (invoice is null)
     {
-      Console.WriteLine("Resposta da API inválida.");
+      Console.WriteLine("Resposta da API invÃ¡lida.");
       return;
     }
 
@@ -355,7 +307,7 @@ internal static class InvoiceScenarios
     Console.WriteLine($"ID:           {invoice.Id}");
     Console.WriteLine($"Cliente:      {invoice.CustomerId}");
     Console.WriteLine(
-        $"Período:      {invoice.PeriodStart:yyyy-MM-dd} até " +
+        $"PerÃ­odo:      {invoice.PeriodStart:yyyy-MM-dd} atÃ© " +
         $"{invoice.PeriodEnd:yyyy-MM-dd}");
     Console.WriteLine($"Valor:        R$ {invoice.Amount:N2}");
     Console.WriteLine($"Status:       {invoice.Status}");
@@ -375,7 +327,7 @@ internal static class InvoiceScenarios
       foreach (var item in invoice.Items)
       {
         Console.WriteLine(
-            $"Operação: {item.OperationId} | " +
+            $"OperaÃ§Ã£o: {item.OperationId} | " +
             $"Valor: R$ {item.Amount:N2}");
       }
     }
@@ -384,3 +336,4 @@ internal static class InvoiceScenarios
     Console.WriteLine($"TOTAL: R$ {invoice.Amount:N2}");
   }
 }
+

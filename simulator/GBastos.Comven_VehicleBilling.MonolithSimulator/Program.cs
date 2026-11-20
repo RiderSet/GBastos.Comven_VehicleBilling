@@ -55,7 +55,8 @@ try
     Console.WriteLine();
     Console.WriteLine("1 - Executar cenÃ¡rio de registro de operaÃ§Ãµes");
     Console.WriteLine("2 - Estornar operação");
-    Console.WriteLine("3 - Gerar fatura pós-paga");
+    Console.WriteLine("3 - Registrar operação pós-paga");
+    Console.WriteLine("5 - Gerar fatura pós-paga");
     Console.WriteLine("4 - Consultar fatura");
     Console.WriteLine("0 - Encerrar");
     Console.WriteLine();
@@ -75,7 +76,11 @@ try
         break;
 
       case "3":
-        await InvoiceScenarios.CreateAsync(apiClient);
+        await InvoiceScenarios.RegisterAsync(apiClient);
+        break;
+
+      case "5":
+        await InvoiceScenarios.GenerateAsync(apiClient);
         break;
 
       case "4":
@@ -124,5 +129,6 @@ catch (Exception ex)
 
   return 1;
 }
+
 
 
