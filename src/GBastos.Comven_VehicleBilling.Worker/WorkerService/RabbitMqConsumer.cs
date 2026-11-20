@@ -293,7 +293,7 @@ public sealed class RabbitMqConsumer : BackgroundService
         {
           case "OperationCreated.v1":
             await services
-                .GetRequiredService<OperationCreatedHandler>()
+                .GetRequiredService<IOperationCreatedHandler>()
                 .HandleAsync(args.Body, cancellationToken);
             break;
 

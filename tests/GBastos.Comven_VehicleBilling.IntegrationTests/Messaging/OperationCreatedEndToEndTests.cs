@@ -104,7 +104,7 @@ public sealed class OperationCreatedEndToEndTests
 
             services.AddInfrastructure(configuration);
 
-            services.AddScoped<OperationCreatedHandler>();
+            services.AddScoped<IOperationCreatedHandler, OperationCreatedHandler>();
 
             services.AddSingleton(options);
             services.AddSingleton<RabbitMqConsumer>();
@@ -174,9 +174,8 @@ public sealed class OperationCreatedEndToEndTests
 
             // Confirma que a segunda entrega foi reconhecida como duplicada.
             await logProvider.WaitForAsync(
-                log => log.Contains(
-                    $"Mensagem {messageId} já consta na Inbox",
-                    StringComparison.Ordinal),
+                log => log.Contains($"Mensagem {messageId}", StringComparison.Ordinal) &&
+                        log.Contains("consta na Inbox", StringComparison.Ordinal),
                 timeout.Token);
 
             // Aguarda também o ACK da segunda entrega.

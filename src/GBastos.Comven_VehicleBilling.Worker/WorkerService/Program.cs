@@ -44,7 +44,7 @@ builder.Configuration
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Handlers e consumidores de mensagens.
-builder.Services.AddScoped<OperationCreatedHandler>();
+builder.Services.AddScoped<IOperationCreatedHandler, OperationCreatedHandler>();
 builder.Services.AddScoped<OperationRefundedHandler>();
 builder.Services.AddScoped<InvoiceCreatedHandler>();
 builder.Services.AddScoped<SupplementaryInvoiceCreatedHandler>();

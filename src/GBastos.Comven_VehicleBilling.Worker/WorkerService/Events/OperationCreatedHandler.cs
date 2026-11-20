@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Comven_VehicleBilling.WorkerService.Events;
 
-public sealed class OperationCreatedHandler
+public sealed class OperationCreatedHandler : IOperationCreatedHandler
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

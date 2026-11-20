@@ -1,5 +1,6 @@
-﻿using System.Text;
+using System.Text;
 using Comven_VehicleBilling.Infrastructure.Outbox;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 
@@ -7,172 +8,189 @@ namespace Comven_VehicleBilling.Infrastructure.Mensageria;
 
 public sealed class RabbitMqPublisher : IAsyncDisposable
 {
-  private const string QueueName = "vehicle-billing-events";
+    private readonly ILogger<RabbitMqPublisher> _logger;
+    private readonly ConnectionFactory _connectionFactory;
+    private readonly string _queueName;
+    private readonly string _deadLetterExchange;
+    private readonly SemaphoreSlim _publishLock = new(1, 1);
 
-  private readonly ILogger<RabbitMqPublisher> _logger;
-  private readonly SemaphoreSlim _publishLock = new(1, 1);
+    private IConnection? _connection;
+    private IChannel? _channel;
 
-  private IConnection? _connection;
-  private IChannel? _channel;
-
-  public RabbitMqPublisher(ILogger<RabbitMqPublisher> logger)
-  {
-    _logger = logger;
-  }
-
-  public async Task PublishAsync(
-      OutboxMessage message,
-      CancellationToken cancellationToken = default)
-  {
-    ArgumentNullException.ThrowIfNull(message);
-
-    await _publishLock.WaitAsync(cancellationToken);
-
-    try
+    public RabbitMqPublisher(
+        ILogger<RabbitMqPublisher> logger,
+        IConfiguration configuration)
     {
-      await EnsureChannelAsync(cancellationToken);
+        _logger = logger;
 
-      var properties = new BasicProperties
-      {
-        MessageId = message.Id.ToString(),
-        Type = message.MessageType,
-        ContentType = "application/json",
-        Persistent = true
-      };
+        _queueName =
+            configuration["RABBITMQ_QUEUE"]
+            ?? "vehicle-billing-events";
 
-      var body = Encoding.UTF8.GetBytes(message.Payload);
+        _deadLetterExchange =
+            configuration["RABBITMQ_DEAD_LETTER_EXCHANGE"]
+            ?? "vehicle-billing.dlx";
 
-      await _channel!.BasicPublishAsync(
-          exchange: string.Empty,
-          routingKey: QueueName,
-          mandatory: true,
-          basicProperties: properties,
-          body: body,
-          cancellationToken: cancellationToken);
+        var user = configuration["RABBITMQ_USER"];
+        var password = configuration["RABBITMQ_PASSWORD"];
+        var virtualHost = configuration["RABBITMQ_VHOST"];
+        var host = configuration["RABBITMQ_HOST"];
+        var portValue = configuration["RABBITMQ_PORT"];
 
-      _logger.LogInformation(
-          "Mensagem {MessageId} publicada e confirmada pelo RabbitMQ. " +
-          "Fila: {QueueName}.",
-          message.Id,
-          QueueName);
-    }
-    catch (OperationCanceledException)
-        when (cancellationToken.IsCancellationRequested)
-    {
-      throw;
-    }
-    catch (Exception exception)
-    {
-      _logger.LogError(
-          exception,
-          "Falha ao publicar a mensagem {MessageId}.",
-          message.Id);
-
-      throw;
-    }
-    finally
-    {
-      _publishLock.Release();
-    }
-  }
-
-  private async Task EnsureChannelAsync(
-      CancellationToken cancellationToken)
-  {
-    if (_connection is { IsOpen: true } &&
-        _channel is { IsOpen: true })
-    {
-      return;
-    }
-
-    if (_channel is not null)
-    {
-      await _channel.DisposeAsync();
-      _channel = null;
-    }
-
-    if (_connection is not { IsOpen: true })
-    {
-      if (_connection is not null)
-      {
-        await _connection.DisposeAsync();
-        _connection = null;
-      }
-
-      var user = Environment.GetEnvironmentVariable("RABBITMQ_USER");
-      var password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
-      var virtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST");
-
-      if (string.IsNullOrWhiteSpace(user) ||
-          string.IsNullOrWhiteSpace(password) ||
-          string.IsNullOrWhiteSpace(virtualHost))
-      {
-        throw new InvalidOperationException(
-            "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
-            "e RABBITMQ_VHOST nas variÃ¡veis de ambiente.");
-      }
-
-      var factory = new ConnectionFactory
-      {
-        HostName =
-              Environment.GetEnvironmentVariable("RABBITMQ_HOST")
-              ?? "localhost",
-
-        Port = int.TryParse(
-              Environment.GetEnvironmentVariable("RABBITMQ_PORT"),
-              out var port)
-              ? port
-              : 5672,
-
-        UserName = user,
-        Password = password,
-        VirtualHost = virtualHost,
-
-        AutomaticRecoveryEnabled = true,
-        NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
-      };
-
-      _connection = await factory.CreateConnectionAsync(
-          cancellationToken);
-    }
-
-    var options = new CreateChannelOptions(
-        publisherConfirmationsEnabled: true,
-        publisherConfirmationTrackingEnabled: true);
-
-    _channel = await _connection!.CreateChannelAsync(
-        options,
-        cancellationToken);
-
-    await _channel.QueueDeclareAsync(
-        queue: QueueName,
-        durable: true,
-        exclusive: false,
-        autoDelete: false,
-        arguments: new Dictionary<string, object?>
+        if (string.IsNullOrWhiteSpace(user) ||
+            string.IsNullOrWhiteSpace(password) ||
+            string.IsNullOrWhiteSpace(virtualHost))
         {
-          ["x-dead-letter-exchange"] = "vehicle-billing.dlx"
-        },
-        cancellationToken: cancellationToken);
+            throw new InvalidOperationException(
+                "Configure RABBITMQ_USER, RABBITMQ_PASSWORD " +
+                "e RABBITMQ_VHOST nas variáveis de ambiente.");
+        }
 
-    _logger.LogInformation(
-        "ConexÃ£o RabbitMQ estabelecida. Fila: {QueueName}.",
-        QueueName);
-  }
+        var port = 5672;
 
-  public async ValueTask DisposeAsync()
-  {
-    if (_channel is not null)
-    {
-      await _channel.DisposeAsync();
+        if (!string.IsNullOrWhiteSpace(portValue) &&
+            (!int.TryParse(portValue, out port) ||
+             port < 1 ||
+             port > 65535))
+        {
+            throw new InvalidOperationException(
+                "RABBITMQ_PORT deve conter uma porta válida.");
+        }
+
+        _connectionFactory = new ConnectionFactory
+        {
+            HostName = string.IsNullOrWhiteSpace(host)
+                ? "localhost"
+                : host,
+            Port = port,
+            UserName = user,
+            Password = password,
+            VirtualHost = virtualHost,
+            AutomaticRecoveryEnabled = true,
+            NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
+        };
     }
 
-    if (_connection is not null)
+    public async Task PublishAsync(
+        OutboxMessage message,
+        CancellationToken cancellationToken = default)
     {
-      await _connection.DisposeAsync();
+        ArgumentNullException.ThrowIfNull(message);
+
+        await _publishLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            await EnsureChannelAsync(cancellationToken);
+
+            var properties = new BasicProperties
+            {
+                MessageId = message.Id.ToString(),
+                Type = message.MessageType,
+                ContentType = "application/json",
+                Persistent = true
+            };
+
+            var body = Encoding.UTF8.GetBytes(message.Payload);
+
+            await _channel!.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _queueName,
+                mandatory: true,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Mensagem {MessageId} publicada e confirmada pelo RabbitMQ. Fila: {QueueName}.",
+                message.Id,
+                _queueName);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Falha ao publicar a mensagem {MessageId}.",
+                message.Id);
+
+            throw;
+        }
+        finally
+        {
+            _publishLock.Release();
+        }
     }
 
-    _publishLock.Dispose();
-  }
+    private async Task EnsureChannelAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_connection is { IsOpen: true } &&
+            _channel is { IsOpen: true })
+        {
+            return;
+        }
+
+        if (_channel is not null)
+        {
+            await _channel.DisposeAsync();
+            _channel = null;
+        }
+
+        if (_connection is not { IsOpen: true })
+        {
+            if (_connection is not null)
+            {
+                await _connection.DisposeAsync();
+                _connection = null;
+            }
+
+            _connection = await _connectionFactory.CreateConnectionAsync(
+                cancellationToken);
+        }
+
+        var options = new CreateChannelOptions(
+            publisherConfirmationsEnabled: true,
+            publisherConfirmationTrackingEnabled: true);
+
+        _channel = await _connection!.CreateChannelAsync(
+            options,
+            cancellationToken);
+
+        await _channel.QueueDeclareAsync(
+            queue: _queueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: new Dictionary<string, object?>
+            {
+                ["x-dead-letter-exchange"] = _deadLetterExchange
+            },
+            cancellationToken: cancellationToken);
+
+        _logger.LogInformation(
+            "Conexão RabbitMQ estabelecida. Fila: {QueueName}.",
+            _queueName);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_channel is not null)
+        {
+            await _channel.DisposeAsync();
+            _channel = null;
+        }
+
+        if (_connection is not null)
+        {
+            await _connection.DisposeAsync();
+            _connection = null;
+        }
+
+        _publishLock.Dispose();
+    }
 }
-
