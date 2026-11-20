@@ -1,4 +1,8 @@
-namespace Comven_VehicleBilling.Api.Contracts.Invoices;
+﻿namespace Comven_VehicleBilling.Api.Contracts.Invoices;
+
+public sealed record InvoiceItemResponse(
+    Guid OperationId,
+    decimal Amount);
 
 public sealed record InvoiceResponse(
     Guid Id,
@@ -9,4 +13,6 @@ public sealed record InvoiceResponse(
     string Status,
     DateTimeOffset CreatedAt,
     Guid? OriginalInvoiceId = null,
-    bool IsSupplementary = false);
+    bool IsSupplementary = false,
+    IReadOnlyList<InvoiceItemResponse>? Items = null);
+

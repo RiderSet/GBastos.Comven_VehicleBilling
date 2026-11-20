@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Domain.Entities;
@@ -12,23 +12,23 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
 
 public sealed class InvoiceRepository : IInvoiceRepository
 {
-    private readonly VehicleBillingDbContext _dbContext;
+  private readonly VehicleBillingDbContext _dbContext;
 
-    public InvoiceRepository(VehicleBillingDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
+  public InvoiceRepository(VehicleBillingDbContext dbContext)
+  {
+    _dbContext = dbContext;
+  }
 
-public async Task<InvoiceDto> CreateAsync(
-    CreateInvoiceCommand command,
-    CancellationToken cancellationToken = default)
-{
+  public async Task<InvoiceDto> CreateAsync(
+      CreateInvoiceCommand command,
+      CancellationToken cancellationToken = default)
+  {
     ArgumentNullException.ThrowIfNull(command);
 
     if (command.CustomerId == Guid.Empty)
-        throw new ArgumentException(
-            "CustomerId cannot be empty.",
-            nameof(command.CustomerId));
+      throw new ArgumentException(
+          "CustomerId cannot be empty.",
+          nameof(command.CustomerId));
 
     var billingPeriod = BillingPeriod.ForMonth(
         command.ReferenceDate.Year,
@@ -43,157 +43,158 @@ public async Task<InvoiceDto> CreateAsync(
 
     try
     {
-        // 1. Bloqueia o cliente para serializar
-        // a geraÃ§Ã£o de faturas do mesmo cliente.
-        var customer = await _dbContext.Customers
-            .FromSqlInterpolated(
-                $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken);
+      // 1. Bloqueia o cliente para serializar
+      // a geraÃƒÂ§ÃƒÂ£o de faturas do mesmo cliente.
+      var customer = await _dbContext.Customers
+          .FromSqlInterpolated(
+              $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
+          .SingleOrDefaultAsync(cancellationToken);
 
-        if (customer is null)
-            throw new InvalidOperationException(
-                "Customer not found.");
+      if (customer is null)
+        throw new InvalidOperationException(
+            "Customer not found.");
 
-        if (customer.Plan != CustomerPlan.Postpaid)
-            throw new InvalidOperationException(
-                "Invoices can only be generated for postpaid customers.");
+      if (customer.Plan != CustomerPlan.Postpaid)
+        throw new InvalidOperationException(
+            "Invoices can only be generated for postpaid customers.");
 
-        // 2. Captura um Ãºnico instante para toda a operaÃ§Ã£o.
-        var now = DateTimeOffset.UtcNow;
+      // 2. Captura um ÃƒÂºnico instante para toda a operaÃƒÂ§ÃƒÂ£o.
+      var now = DateTimeOffset.UtcNow;
 
-        // 3. Verifica se a fatura jÃ¡ foi gerada.
-        // Uma nova tentativa deve retornar a fatura existente.
-        var existingInvoice = await _dbContext.Invoices
-            .AsNoTracking()
-            .Where(invoice =>
-                invoice.CustomerId == command.CustomerId
-                && invoice.PeriodStart == periodStart
-                && invoice.PeriodEnd == periodEnd
-                && invoice.OriginalInvoiceId == null)
-            .OrderByDescending(invoice => invoice.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+      // 3. Verifica se a fatura jÃƒÂ¡ foi gerada.
+      // Uma nova tentativa deve retornar a fatura existente.
+      var existingInvoice = await _dbContext.Invoices
+          .AsNoTracking()
+          .Include(invoice => invoice.Items)
+          .Where(invoice =>
+              invoice.CustomerId == command.CustomerId
+              && invoice.PeriodStart == periodStart
+              && invoice.PeriodEnd == periodEnd
+              && invoice.OriginalInvoiceId == null)
+          .OrderByDescending(invoice => invoice.CreatedAt)
+          .FirstOrDefaultAsync(cancellationToken);
 
-        if (existingInvoice is not null)
-            return Map(existingInvoice);
+      if (existingInvoice is not null)
+        return Map(existingInvoice);
 
-        // 4. Valida o perÃ­odo antes de buscar operaÃ§Ãµes.
-        if (!BillingPeriodRules.CanGenerateInvoice(
-                billingPeriod,
-                now))
-        {
-            throw new InvalidOperationException(
-                "O período de faturamento ainda não pode gerar uma fatura.");
-        }
+      // 4. Valida o perÃƒÂ­odo antes de buscar operaÃƒÂ§ÃƒÂµes.
+      if (!BillingPeriodRules.CanGenerateInvoice(
+              billingPeriod,
+              now))
+      {
+        throw new InvalidOperationException(
+            "O perÃ­odo de faturamento ainda nÃ£o pode gerar uma fatura.");
+      }
 
-        // 5. Busca as operaÃ§Ãµes pendentes do perÃ­odo.
-        var periodStartUtc = new DateTimeOffset(
-            periodStart.ToDateTime(TimeOnly.MinValue),
-            TimeSpan.Zero);
+      // 5. Busca as operaÃƒÂ§ÃƒÂµes pendentes do perÃƒÂ­odo.
+      var periodStartUtc = new DateTimeOffset(
+          periodStart.ToDateTime(TimeOnly.MinValue),
+          TimeSpan.Zero);
 
-        var periodEndUtc = new DateTimeOffset(
-            periodEnd.ToDateTime(TimeOnly.MinValue),
-            TimeSpan.Zero);
+      var periodEndUtc = new DateTimeOffset(
+          periodEnd.ToDateTime(TimeOnly.MinValue),
+          TimeSpan.Zero);
 
-        var operations = await _dbContext.Operations
-            .Where(operation =>
-                operation.CustomerId == command.CustomerId
-                && operation.Status == OperationStatus.AwaitingInvoice
-                && operation.CreatedAt >= periodStartUtc
-                && operation.CreatedAt < periodEndUtc)
-            .OrderBy(operation => operation.CreatedAt)
-            .ThenBy(operation => operation.Id)
-            .ToListAsync(cancellationToken);
+      var operations = await _dbContext.Operations
+          .Where(operation =>
+              operation.CustomerId == command.CustomerId
+              && operation.Status == OperationStatus.AwaitingInvoice
+              && operation.CreatedAt >= periodStartUtc
+              && operation.CreatedAt < periodEndUtc)
+          .OrderBy(operation => operation.CreatedAt)
+          .ThenBy(operation => operation.Id)
+          .ToListAsync(cancellationToken);
 
-        if (operations.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "There are no pending operations for the billing period.");
-        }
+      if (operations.Count == 0)
+      {
+        throw new InvalidOperationException(
+            "There are no pending operations for the billing period.");
+      }
 
-        // 6. Cria a fatura.
-        var invoice = new Invoice(
-            Guid.NewGuid(),
-            command.CustomerId,
-            periodStart,
-            periodEnd,
+      // 6. Cria a fatura.
+      var invoice = new Invoice(
+          Guid.NewGuid(),
+          command.CustomerId,
+          periodStart,
+          periodEnd,
+          now);
+
+      foreach (var operation in operations)
+      {
+        var item = new InvoiceItem(
+            invoice.Id,
+            operation.Id,
+            operation.Amount);
+
+        invoice.AddItem(item);
+
+        operation.MarkInvoiced(
+            invoice.Id,
             now);
+      }
 
-        foreach (var operation in operations)
+      invoice.FinalizeInvoice();
+
+      _dbContext.Invoices.Add(invoice);
+
+      // 7. Registra o evento na Outbox.
+      var eventId = Guid.NewGuid();
+
+      var payload = JsonSerializer.Serialize(new
+      {
+        EventId = eventId,
+        InvoiceId = invoice.Id,
+        CustomerId = invoice.CustomerId,
+        PeriodStart = invoice.PeriodStart,
+        PeriodEnd = invoice.PeriodEnd,
+        Total = invoice.Total.Amount,
+        CreatedAt = invoice.CreatedAt,
+        Items = invoice.Items.Select(item => new
         {
-            var item = new InvoiceItem(
-                invoice.Id,
-                operation.Id,
-                operation.Amount);
+          OperationId = item.OperationId,
+          Amount = item.Amount.Amount
+        })
+      });
 
-            invoice.AddItem(item);
+      _dbContext.OutboxMessages.Add(
+          new OutboxMessage(
+              eventId,
+              "InvoiceCreated.v1",
+              invoice.Id,
+              payload));
 
-            operation.MarkInvoiced(
-                invoice.Id,
-                now);
-        }
+      // 8. Persiste fatura, itens, operaÃƒÂ§ÃƒÂµes e Outbox
+      // na mesma transaÃƒÂ§ÃƒÂ£o.
+      await _dbContext.SaveChangesAsync(cancellationToken);
 
-        invoice.FinalizeInvoice();
+      await transaction.CommitAsync(cancellationToken);
 
-        _dbContext.Invoices.Add(invoice);
-
-        // 7. Registra o evento na Outbox.
-        var eventId = Guid.NewGuid();
-
-        var payload = JsonSerializer.Serialize(new
-        {
-            EventId = eventId,
-            InvoiceId = invoice.Id,
-            CustomerId = invoice.CustomerId,
-            PeriodStart = invoice.PeriodStart,
-            PeriodEnd = invoice.PeriodEnd,
-            Total = invoice.Total.Amount,
-            CreatedAt = invoice.CreatedAt,
-            Items = invoice.Items.Select(item => new
-            {
-                OperationId = item.OperationId,
-                Amount = item.Amount.Amount
-            })
-        });
-
-        _dbContext.OutboxMessages.Add(
-            new OutboxMessage(
-                eventId,
-                "InvoiceCreated.v1",
-                invoice.Id,
-                payload));
-
-        // 8. Persiste fatura, itens, operaÃ§Ãµes e Outbox
-        // na mesma transaÃ§Ã£o.
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return Map(invoice);
+      return Map(invoice);
     }
     catch
     {
-        if (_dbContext.Database.CurrentTransaction is not null)
-            await transaction.RollbackAsync(CancellationToken.None);
+      if (_dbContext.Database.CurrentTransaction is not null)
+        await transaction.RollbackAsync(CancellationToken.None);
 
-        throw;
+      throw;
     }
-}
+  }
 
-public async Task<InvoiceDto> CreateSupplementaryAsync(
-    CreateSupplementaryInvoiceCommand command,
-    CancellationToken cancellationToken = default)
-{
+  public async Task<InvoiceDto> CreateSupplementaryAsync(
+      CreateSupplementaryInvoiceCommand command,
+      CancellationToken cancellationToken = default)
+  {
     ArgumentNullException.ThrowIfNull(command);
 
     if (command.CustomerId == Guid.Empty)
-        throw new ArgumentException(
-            "CustomerId cannot be empty.",
-            nameof(command.CustomerId));
+      throw new ArgumentException(
+          "CustomerId cannot be empty.",
+          nameof(command.CustomerId));
 
     if (command.OriginalInvoiceId == Guid.Empty)
-        throw new ArgumentException(
-            "OriginalInvoiceId cannot be empty.",
-            nameof(command.OriginalInvoiceId));
+      throw new ArgumentException(
+          "OriginalInvoiceId cannot be empty.",
+          nameof(command.OriginalInvoiceId));
 
     ArgumentException.ThrowIfNullOrWhiteSpace(
         command.IdempotencyKey);
@@ -201,9 +202,9 @@ public async Task<InvoiceDto> CreateSupplementaryAsync(
     var idempotencyKey = command.IdempotencyKey.Trim();
 
     if (idempotencyKey.Length > 200)
-        throw new ArgumentException(
-            "IdempotencyKey cannot exceed 200 characters.",
-            nameof(command.IdempotencyKey));
+      throw new ArgumentException(
+          "IdempotencyKey cannot exceed 200 characters.",
+          nameof(command.IdempotencyKey));
 
     await using var transaction =
         await _dbContext.Database.BeginTransactionAsync(
@@ -211,169 +212,171 @@ public async Task<InvoiceDto> CreateSupplementaryAsync(
 
     try
     {
-        // Serializa a geração de faturas do mesmo cliente.
-        var customer = await _dbContext.Customers
-            .FromSqlInterpolated(
-                $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken);
+      // Serializa a geraÃ§Ã£o de faturas do mesmo cliente.
+      var customer = await _dbContext.Customers
+          .FromSqlInterpolated(
+              $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
+          .SingleOrDefaultAsync(cancellationToken);
 
-        if (customer is null)
-            throw new InvalidOperationException(
-                "Customer not found.");
+      if (customer is null)
+        throw new InvalidOperationException(
+            "Customer not found.");
 
-        if (customer.Plan != CustomerPlan.Postpaid)
-            throw new InvalidOperationException(
-                "Supplementary invoices can only be generated for postpaid customers.");
+      if (customer.Plan != CustomerPlan.Postpaid)
+        throw new InvalidOperationException(
+            "Supplementary invoices can only be generated for postpaid customers.");
 
-        var originalInvoice = await _dbContext.Invoices
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                invoice => invoice.Id == command.OriginalInvoiceId,
-                cancellationToken);
+      var originalInvoice = await _dbContext.Invoices
+          .AsNoTracking()
+          .SingleOrDefaultAsync(
+              invoice => invoice.Id == command.OriginalInvoiceId,
+              cancellationToken);
 
-        if (originalInvoice is null)
-            throw new InvalidOperationException(
-                "Original invoice not found.");
+      if (originalInvoice is null)
+        throw new InvalidOperationException(
+            "Original invoice not found.");
 
-        if (originalInvoice.CustomerId != command.CustomerId)
-            throw new InvalidOperationException(
-                "The original invoice does not belong to the informed customer.");
+      if (originalInvoice.CustomerId != command.CustomerId)
+        throw new InvalidOperationException(
+            "The original invoice does not belong to the informed customer.");
 
-        if (originalInvoice.OriginalInvoiceId.HasValue)
-            throw new InvalidOperationException(
-                "A supplementary invoice cannot be used as the original invoice.");
+      if (originalInvoice.OriginalInvoiceId.HasValue)
+        throw new InvalidOperationException(
+            "A supplementary invoice cannot be used as the original invoice.");
 
-        // A idempotência é verificada antes das demais regras de criação.
-        var existingInvoice = await _dbContext.Invoices
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                invoice =>
-                    invoice.OriginalInvoiceId == command.OriginalInvoiceId
-                    && invoice.IdempotencyKey == idempotencyKey,
-                cancellationToken);
+      // A idempotÃªncia Ã© verificada antes das demais regras de criaÃ§Ã£o.
+      var existingInvoice = await _dbContext.Invoices
+  .AsNoTracking()
+  .Include(invoice => invoice.Items)
+  .SingleOrDefaultAsync(
+      invoice =>
+          invoice.OriginalInvoiceId == command.OriginalInvoiceId
+          && invoice.IdempotencyKey == idempotencyKey,
+      cancellationToken);
 
-        if (existingInvoice is not null)
-            return Map(existingInvoice);
+      if (existingInvoice is not null)
+        return Map(existingInvoice);
 
-        // Somente faturas geradas e disponíveis para cobrança
-        // podem originar uma fatura complementar.
-        if (originalInvoice.Status != InvoiceStatus.PaymentPending
-            && originalInvoice.Status != InvoiceStatus.Paid)
+      // Somente faturas geradas e disponÃ­veis para cobranÃ§a
+      // podem originar uma fatura complementar.
+      if (originalInvoice.Status != InvoiceStatus.PaymentPending
+          && originalInvoice.Status != InvoiceStatus.Paid)
+      {
+        throw new InvalidOperationException(
+            "The original invoice must be awaiting payment or already paid.");
+      }
+
+      var now = DateTimeOffset.UtcNow;
+
+      var periodStartUtc = new DateTimeOffset(
+          originalInvoice.PeriodStart.ToDateTime(TimeOnly.MinValue),
+          TimeSpan.Zero);
+
+      var periodEndUtc = new DateTimeOffset(
+          originalInvoice.PeriodEnd.ToDateTime(TimeOnly.MinValue),
+          TimeSpan.Zero);
+
+      // Somente operaÃ§Ãµes ainda nÃ£o faturadas dentro do perÃ­odo
+      // da fatura original podem entrar na complementar.
+      var operations = await _dbContext.Operations
+          .Where(operation =>
+              operation.CustomerId == command.CustomerId
+              && operation.Status == OperationStatus.AwaitingInvoice
+              && operation.CreatedAt >= periodStartUtc
+              && operation.CreatedAt < periodEndUtc)
+          .OrderBy(operation => operation.CreatedAt)
+          .ThenBy(operation => operation.Id)
+          .ToListAsync(cancellationToken);
+
+      if (operations.Count == 0)
+      {
+        throw new InvalidOperationException(
+            "There are no pending operations for the original invoice period.");
+      }
+
+      var invoice = new Invoice(
+          Guid.NewGuid(),
+          command.CustomerId,
+          originalInvoice.PeriodStart,
+          originalInvoice.PeriodEnd,
+          now,
+          originalInvoice.Id,
+          idempotencyKey);
+
+      foreach (var operation in operations)
+      {
+        var item = new InvoiceItem(
+            invoice.Id,
+            operation.Id,
+            operation.Amount);
+
+        invoice.AddItem(item);
+
+        operation.MarkInvoiced(
+            invoice.Id,
+            now);
+      }
+
+      invoice.FinalizeInvoice();
+
+      _dbContext.Invoices.Add(invoice);
+
+      // Evento especÃ­fico para permitir que os consumidores
+      // distingam faturamento original de faturamento complementar.
+      var eventId = Guid.NewGuid();
+
+      var payload = JsonSerializer.Serialize(new
+      {
+        EventId = eventId,
+        InvoiceId = invoice.Id,
+        OriginalInvoiceId = originalInvoice.Id,
+        IdempotencyKey = idempotencyKey,
+        CustomerId = invoice.CustomerId,
+        PeriodStart = invoice.PeriodStart,
+        PeriodEnd = invoice.PeriodEnd,
+        Total = invoice.Total.Amount,
+        CreatedAt = invoice.CreatedAt,
+        Items = invoice.Items.Select(item => new
         {
-            throw new InvalidOperationException(
-                "The original invoice must be awaiting payment or already paid.");
-        }
+          OperationId = item.OperationId,
+          Amount = item.Amount.Amount
+        })
+      });
 
-        var now = DateTimeOffset.UtcNow;
+      _dbContext.OutboxMessages.Add(
+          new OutboxMessage(
+              eventId,
+              "SupplementaryInvoiceCreated.v1",
+              invoice.Id,
+              payload));
 
-        var periodStartUtc = new DateTimeOffset(
-            originalInvoice.PeriodStart.ToDateTime(TimeOnly.MinValue),
-            TimeSpan.Zero);
+      await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var periodEndUtc = new DateTimeOffset(
-            originalInvoice.PeriodEnd.ToDateTime(TimeOnly.MinValue),
-            TimeSpan.Zero);
+      await transaction.CommitAsync(cancellationToken);
 
-        // Somente operações ainda não faturadas dentro do período
-        // da fatura original podem entrar na complementar.
-        var operations = await _dbContext.Operations
-            .Where(operation =>
-                operation.CustomerId == command.CustomerId
-                && operation.Status == OperationStatus.AwaitingInvoice
-                && operation.CreatedAt >= periodStartUtc
-                && operation.CreatedAt < periodEndUtc)
-            .OrderBy(operation => operation.CreatedAt)
-            .ThenBy(operation => operation.Id)
-            .ToListAsync(cancellationToken);
-
-        if (operations.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "There are no pending operations for the original invoice period.");
-        }
-
-        var invoice = new Invoice(
-            Guid.NewGuid(),
-            command.CustomerId,
-            originalInvoice.PeriodStart,
-            originalInvoice.PeriodEnd,
-            now,
-            originalInvoice.Id,
-            idempotencyKey);
-
-        foreach (var operation in operations)
-        {
-            var item = new InvoiceItem(
-                invoice.Id,
-                operation.Id,
-                operation.Amount);
-
-            invoice.AddItem(item);
-
-            operation.MarkInvoiced(
-                invoice.Id,
-                now);
-        }
-
-        invoice.FinalizeInvoice();
-
-        _dbContext.Invoices.Add(invoice);
-
-        // Evento específico para permitir que os consumidores
-        // distingam faturamento original de faturamento complementar.
-        var eventId = Guid.NewGuid();
-
-        var payload = JsonSerializer.Serialize(new
-        {
-            EventId = eventId,
-            InvoiceId = invoice.Id,
-            OriginalInvoiceId = originalInvoice.Id,
-            IdempotencyKey = idempotencyKey,
-            CustomerId = invoice.CustomerId,
-            PeriodStart = invoice.PeriodStart,
-            PeriodEnd = invoice.PeriodEnd,
-            Total = invoice.Total.Amount,
-            CreatedAt = invoice.CreatedAt,
-            Items = invoice.Items.Select(item => new
-            {
-                OperationId = item.OperationId,
-                Amount = item.Amount.Amount
-            })
-        });
-
-        _dbContext.OutboxMessages.Add(
-            new OutboxMessage(
-                eventId,
-                "SupplementaryInvoiceCreated.v1",
-                invoice.Id,
-                payload));
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return Map(invoice);
+      return Map(invoice);
     }
     catch
     {
-        if (_dbContext.Database.CurrentTransaction is not null)
-            await transaction.RollbackAsync(CancellationToken.None);
+      if (_dbContext.Database.CurrentTransaction is not null)
+        await transaction.RollbackAsync(CancellationToken.None);
 
-        throw;
+      throw;
     }
-}
+  }
 
-public async Task<InvoiceDto?> GetByIdAsync(
-    Guid id,
-    CancellationToken cancellationToken = default)
-{
+  public async Task<InvoiceDto?> GetByIdAsync(
+      Guid id,
+      CancellationToken cancellationToken = default)
+  {
     if (id == Guid.Empty)
-        throw new ArgumentException(
-            "Invoice id cannot be empty.",
-            nameof(id));
+      throw new ArgumentException(
+          "Invoice id cannot be empty.",
+          nameof(id));
 
     var invoice = await _dbContext.Invoices
         .AsNoTracking()
+        .Include(invoice => invoice.Items)
         .SingleOrDefaultAsync(
             invoice => invoice.Id == id,
             cancellationToken);
@@ -381,15 +384,17 @@ public async Task<InvoiceDto?> GetByIdAsync(
     return invoice is null
         ? null
         : Map(invoice);
-}
+  }
 
   public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
       Guid? customerId = null,
       CancellationToken cancellationToken = default)
   {
     var query = _dbContext.Invoices
-        .AsNoTracking()
-        .AsQueryable();
+    .AsNoTracking()
+    .Include(invoice => invoice.Items)
+    .AsQueryable();
+
 
     if (customerId.HasValue)
     {
@@ -407,14 +412,21 @@ public async Task<InvoiceDto?> GetByIdAsync(
   }
 
   private static InvoiceDto Map(Invoice invoice)
-    => new(
-        invoice.Id,
-        invoice.CustomerId,
-        invoice.PeriodStart,
-        invoice.PeriodEnd,
-        invoice.Total.Amount,
-        invoice.Status.ToString(),
-        invoice.CreatedAt,
-        invoice.OriginalInvoiceId);
+      => new(
+          invoice.Id,
+          invoice.CustomerId,
+          invoice.PeriodStart,
+          invoice.PeriodEnd,
+          invoice.Total.Amount,
+          invoice.Status.ToString(),
+          invoice.CreatedAt,
+          invoice.OriginalInvoiceId,
+          invoice.Items
+              .Select(item => new InvoiceItemDto(
+                  item.OperationId,
+                  item.Amount.Amount))
+              .ToList());
 
 }
+
+

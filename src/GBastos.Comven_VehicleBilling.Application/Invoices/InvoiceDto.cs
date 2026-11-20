@@ -1,5 +1,9 @@
 namespace Comven_VehicleBilling.Application.Invoices;
 
+public sealed record InvoiceItemDto(
+    Guid OperationId,
+    decimal Amount);
+
 public sealed record InvoiceDto(
     Guid Id,
     Guid CustomerId,
@@ -8,7 +12,8 @@ public sealed record InvoiceDto(
     decimal Amount,
     string Status,
     DateTimeOffset CreatedAt,
-    Guid? OriginalInvoiceId)
+    Guid? OriginalInvoiceId,
+    IReadOnlyList<InvoiceItemDto> Items)
 {
   public bool IsSupplementary => OriginalInvoiceId.HasValue;
 }

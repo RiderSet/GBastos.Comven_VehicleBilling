@@ -173,15 +173,20 @@ public static class InvoiceEndpoints
         return Results.Ok(invoices.Select(ToResponse).ToList());
     }
 
-    private static InvoiceResponse ToResponse(InvoiceDto invoice)
-        => new(
-            invoice.Id,
-            invoice.CustomerId,
-            invoice.PeriodStart,
-            invoice.PeriodEnd,
-            invoice.Amount,
-            invoice.Status,
-            invoice.CreatedAt,
-            invoice.OriginalInvoiceId,
-            invoice.IsSupplementary);
+  private static InvoiceResponse ToResponse(InvoiceDto invoice)
+      => new(
+          invoice.Id,
+          invoice.CustomerId,
+          invoice.PeriodStart,
+          invoice.PeriodEnd,
+          invoice.Amount,
+          invoice.Status,
+          invoice.CreatedAt,
+          invoice.OriginalInvoiceId,
+          invoice.IsSupplementary,
+          invoice.Items
+              .Select(item => new InvoiceItemResponse(
+                  item.OperationId,
+                  item.Amount))
+              .ToList());
 }

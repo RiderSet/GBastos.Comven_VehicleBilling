@@ -1,4 +1,8 @@
-﻿namespace Comven_VehicleBilling.MonolithSimulator.Models.Responses;
+namespace Comven_VehicleBilling.MonolithSimulator.Models.Responses;
+
+public sealed record InvoiceItemResponse(
+    Guid OperationId,
+    decimal Amount);
 
 public sealed record InvoiceResponse(
     Guid Id,
@@ -7,4 +11,7 @@ public sealed record InvoiceResponse(
     DateOnly PeriodEnd,
     decimal Amount,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? OriginalInvoiceId = null,
+    bool IsSupplementary = false,
+    IReadOnlyList<InvoiceItemResponse>? Items = null);
