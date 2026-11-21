@@ -82,7 +82,10 @@ public sealed class InvoiceRepositoryTests
 
             await db.SaveChangesAsync();
 
-            var repository = new InvoiceRepository(db);
+            var testClock = new FixedTimeProvider(
+                new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero));
+
+            var repository = new InvoiceRepository(db, testClock);
 
             var command = new CreateInvoiceCommand(
                 customerId,
@@ -167,6 +170,18 @@ public sealed class InvoiceRepositoryTests
         }
     }
 
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _utcNow;
+
+        public FixedTimeProvider(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow()
+            => _utcNow;
+    }
     private static void AddAwaitingInvoiceOperation(
         VehicleBillingDbContext db,
         Guid operationId,
@@ -189,4 +204,5 @@ public sealed class InvoiceRepositoryTests
         db.Operations.Add(operation);
     }
 }
+
 

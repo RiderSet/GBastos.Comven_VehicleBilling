@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
 
 namespace Comven_VehicleBilling.Application.Invoices;
 
@@ -21,16 +21,17 @@ public sealed class InvoiceService
 
         if (command.CustomerId == Guid.Empty)
             throw new ArgumentException(
-                "O identificador do cliente Ã© invÃ¡lido.",
+                "O identificador do cliente é inválido.",
                 nameof(command));
 
         if (command.ReferenceDate == DateOnly.MinValue)
             throw new ArgumentException(
-                "A data de referÃªncia Ã© invÃ¡lida.",
+                "A data de referência é inválida.",
                 nameof(command));
 
         return await _repository.CreateAsync(
-            command, cancellationToken);
+            command,
+            cancellationToken);
     }
 
     public async Task<InvoiceDto> CreateSupplementaryAsync(
@@ -56,29 +57,30 @@ public sealed class InvoiceService
         if (command.IdempotencyKey.Trim().Length > 200)
             throw new ArgumentException(
                 "A chave de idempotência deve ter no máximo 200 caracteres.",
-                nameof(command));
+                nameof(command.IdempotencyKey));
 
         return await _repository.CreateSupplementaryAsync(
             command,
             cancellationToken);
     }
 
-  public async Task<InvoiceDto?> GetByIdAsync(
-      Guid id,
-      CancellationToken cancellationToken = default)
-  {
-    cancellationToken.ThrowIfCancellationRequested();
+    public async Task<InvoiceDto?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
 
-    if (id == Guid.Empty)
-      throw new ArgumentException(
-          "O identificador da fatura Ã© invÃ¡lido.",
-          nameof(id));
+        if (id == Guid.Empty)
+            throw new ArgumentException(
+                "O identificador da fatura é inválido.",
+                nameof(id));
 
-    return await _repository.GetByIdAsync(
-        id, cancellationToken);
-  }
+        return await _repository.GetByIdAsync(
+            id,
+            cancellationToken);
+    }
 
-  public Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
+    public async Task<IReadOnlyList<InvoiceDto>> GetAllAsync(
         Guid? customerId = null,
         CancellationToken cancellationToken = default)
     {
@@ -86,10 +88,11 @@ public sealed class InvoiceService
 
         if (customerId == Guid.Empty)
             throw new ArgumentException(
-                "O identificador do cliente Ã© invÃ¡lido.",
+                "O identificador do cliente é inválido.",
                 nameof(customerId));
 
-        return _repository.GetAllAsync(
-            customerId, cancellationToken);
+        return await _repository.GetAllAsync(
+            customerId,
+            cancellationToken);
     }
 }

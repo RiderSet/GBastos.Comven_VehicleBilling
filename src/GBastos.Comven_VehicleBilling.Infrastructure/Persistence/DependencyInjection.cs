@@ -28,6 +28,7 @@ public static class DependencyInjection
     services.AddScoped<ICustomerRepository, CustomerRepository>();
     services.AddScoped<IBalanceCreditRepository, BalanceCreditRepository>();
     services.AddScoped<IOperationRepository, OperationRepository>();
+    services.AddSingleton<TimeProvider>(TimeProvider.System);
     services.AddScoped<IInvoiceRepository, InvoiceRepository>();
     services.AddScoped<IStatementRepository, StatementRepository>();
 
@@ -51,4 +52,5 @@ public static class DependencyInjection
         options.UseNpgsql(connectionString));
   }
 }
+
 

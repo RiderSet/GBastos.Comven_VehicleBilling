@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Domain.Entities;
@@ -13,10 +13,14 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
 public sealed class InvoiceRepository : IInvoiceRepository
 {
   private readonly VehicleBillingDbContext _dbContext;
+  private readonly TimeProvider _timeProvider;
 
-  public InvoiceRepository(VehicleBillingDbContext dbContext)
+  public InvoiceRepository(
+      VehicleBillingDbContext dbContext,
+      TimeProvider timeProvider)
   {
-    _dbContext = dbContext;
+    _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+    _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
   }
 
   public async Task<InvoiceDto> CreateAsync(
@@ -59,7 +63,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
             "Invoices can only be generated for postpaid customers.");
 
       // 2. Captura um ÃƒÂºnico instante para toda a operaÃƒÂ§ÃƒÂ£o.
-      var now = DateTimeOffset.UtcNow;
+      var now = _timeProvider.GetUtcNow();
 
       // 3. Verifica se a fatura jÃƒÂ¡ foi gerada.
       // Uma nova tentativa deve retornar a fatura existente.
@@ -266,7 +270,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
             "The original invoice must be awaiting payment or already paid.");
       }
 
-      var now = DateTimeOffset.UtcNow;
+      var now = _timeProvider.GetUtcNow();
 
       var periodStartUtc = new DateTimeOffset(
           originalInvoice.PeriodStart.ToDateTime(TimeOnly.MinValue),
@@ -428,5 +432,6 @@ public sealed class InvoiceRepository : IInvoiceRepository
               .ToList());
 
 }
+
 
 
