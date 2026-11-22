@@ -36,6 +36,11 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         .HasMaxLength(200)
         .IsRequired(false);
 
+    builder.Property(invoice => invoice.ExternalPaymentId)
+        .HasColumnName("external_payment_id")
+        .HasMaxLength(200)
+        .IsRequired(false);
+
     builder.HasIndex(invoice => new
     {
         invoice.OriginalInvoiceId,
@@ -91,5 +96,16 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
       invoice.CreatedAt
     })
         .HasDatabaseName("ix_invoices_status_created_at");
+
+builder.HasIndex(invoice => new
+    {
+        invoice.CustomerId,
+        invoice.PeriodStart,
+        invoice.PeriodEnd
+    })
+    .IsUnique()
+    .HasDatabaseName("ux_invoices_customer_period")
+    .HasFilter("original_invoice_id IS NULL");
+
   }
 }

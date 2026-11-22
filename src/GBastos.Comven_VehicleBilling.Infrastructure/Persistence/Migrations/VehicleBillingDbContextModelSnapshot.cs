@@ -141,8 +141,6 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CustomerId");
-
                     b.HasIndex("OriginalInvoiceId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ux_invoices_original_idempotency")
@@ -150,6 +148,11 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_invoices_status_created_at");
+
+                    b.HasIndex("CustomerId", "PeriodStart", "PeriodEnd")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoices_customer_period")
+                        .HasFilter("original_invoice_id IS NULL");
 
                     b.ToTable("invoices", (string)null);
                 });

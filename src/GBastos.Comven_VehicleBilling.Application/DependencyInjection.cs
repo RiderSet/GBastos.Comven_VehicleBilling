@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.BalanceCredits;
+﻿using Comven_VehicleBilling.Application.BalanceCredits;
 using Comven_VehicleBilling.Application.Customers;
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Application.Operations;
@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<OperationService>();
         services.AddScoped<StatementService>();
         services.AddScoped<InvoiceService>();
+        services.AddScoped<InvoicePaymentService>();
         services.AddScoped<BalanceCreditService>();
 
         services.AddValidatorsFromAssemblyContaining<OperationService>();
@@ -24,3 +25,4 @@ public static class DependencyInjection
         return services;
     }
 }
+

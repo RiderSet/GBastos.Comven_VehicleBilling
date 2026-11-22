@@ -23,6 +23,11 @@ public static class InvoiceEndpoints
             .Produces<InvoiceResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
+        group.MapPost("/{id:guid}/payment", PayInvoice)
+            .WithName("PayInvoice")
+            .WithSummary("Processa o pagamento de uma fatura")
+            .Produces<InvoiceResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapGet("/{id:guid}", GetInvoiceById)
             .WithName("GetInvoiceById")
             .WithSummary("Consulta uma fatura pelo identificador")
@@ -139,6 +144,34 @@ public static class InvoiceEndpoints
         }
     }
 
+    private static async Task<IResult> PayInvoice(
+        Guid id,
+        InvoicePaymentService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoice = await service.PayAsync(
+                id,
+                cancellationToken);
+
+            return Results.Ok(ToResponse(invoice));
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.Problem(
+                title: "Identificador da fatura inválido",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.Problem(
+                title: "Fatura não encontrada",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status404NotFound);
+        }
+    }
     private static async Task<IResult> GetInvoiceById(
         Guid id,
         InvoiceService service,

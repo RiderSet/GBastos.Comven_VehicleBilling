@@ -1,4 +1,6 @@
-﻿using Comven_VehicleBilling.Application.Abstractions.Persistence;
+﻿using Comven_VehicleBilling.Infrastructure.PaymentsProvider;
+using Comven_VehicleBilling.Application.Abstractions.Payments;
+using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Abstractions.Billing;
 using Comven_VehicleBilling.Infrastructure.BillingsProvider;
 using Comven_VehicleBilling.Infrastructure.Inbox;
@@ -24,6 +26,7 @@ public static class DependencyInjection
     services.AddScoped<OutboxRepository>();
     services.AddScoped<InboxRepository>();
     services.AddSingleton<IBillingProvider, BillingProvider>();
+        services.AddSingleton<IPaymentProvider, PaymentProvider>();
     services.AddSingleton<RabbitMqPublisher>();
     services.AddScoped<ICustomerRepository, CustomerRepository>();
     services.AddScoped<IBalanceCreditRepository, BalanceCreditRepository>();
@@ -52,5 +55,7 @@ public static class DependencyInjection
         options.UseNpgsql(connectionString));
   }
 }
+
+
 
 

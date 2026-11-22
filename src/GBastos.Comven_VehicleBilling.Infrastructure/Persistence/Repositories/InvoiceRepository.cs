@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
+using Comven_VehicleBilling.Application.Abstractions.Payments;
 using Comven_VehicleBilling.Application.Invoices;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
@@ -48,7 +49,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
     try
     {
       // 1. Bloqueia o cliente para serializar
-      // a geraÃƒÂ§ÃƒÂ£o de faturas do mesmo cliente.
+      // a geraÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o de faturas do mesmo cliente.
       var customer = await _dbContext.Customers
           .FromSqlInterpolated(
               $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
@@ -62,10 +63,10 @@ public sealed class InvoiceRepository : IInvoiceRepository
         throw new InvalidOperationException(
             "Invoices can only be generated for postpaid customers.");
 
-      // 2. Captura um ÃƒÂºnico instante para toda a operaÃƒÂ§ÃƒÂ£o.
+      // 2. Captura um ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºnico instante para toda a operaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o.
       var now = _timeProvider.GetUtcNow();
 
-      // 3. Verifica se a fatura jÃƒÂ¡ foi gerada.
+      // 3. Verifica se a fatura jÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ foi gerada.
       // Uma nova tentativa deve retornar a fatura existente.
       var existingInvoice = await _dbContext.Invoices
           .AsNoTracking()
@@ -81,16 +82,16 @@ public sealed class InvoiceRepository : IInvoiceRepository
       if (existingInvoice is not null)
         return Map(existingInvoice);
 
-      // 4. Valida o perÃƒÂ­odo antes de buscar operaÃƒÂ§ÃƒÂµes.
+      // 4. Valida o perÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­odo antes de buscar operaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµes.
       if (!BillingPeriodRules.CanGenerateInvoice(
               billingPeriod,
               now))
       {
         throw new InvalidOperationException(
-            "O perÃ­odo de faturamento ainda nÃ£o pode gerar uma fatura.");
+            "O perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo de faturamento ainda nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o pode gerar uma fatura.");
       }
 
-      // 5. Busca as operaÃƒÂ§ÃƒÂµes pendentes do perÃƒÂ­odo.
+      // 5. Busca as operaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµes pendentes do perÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­odo.
       var periodStartUtc = new DateTimeOffset(
           periodStart.ToDateTime(TimeOnly.MinValue),
           TimeSpan.Zero);
@@ -167,8 +168,8 @@ public sealed class InvoiceRepository : IInvoiceRepository
               invoice.Id,
               payload));
 
-      // 8. Persiste fatura, itens, operaÃƒÂ§ÃƒÂµes e Outbox
-      // na mesma transaÃƒÂ§ÃƒÂ£o.
+      // 8. Persiste fatura, itens, operaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµes e Outbox
+      // na mesma transaÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o.
       await _dbContext.SaveChangesAsync(cancellationToken);
 
       await transaction.CommitAsync(cancellationToken);
@@ -216,7 +217,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
     try
     {
-      // Serializa a geraÃ§Ã£o de faturas do mesmo cliente.
+      // Serializa a geraÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o de faturas do mesmo cliente.
       var customer = await _dbContext.Customers
           .FromSqlInterpolated(
               $"SELECT * FROM customers WHERE id = {command.CustomerId} FOR UPDATE")
@@ -248,7 +249,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
         throw new InvalidOperationException(
             "A supplementary invoice cannot be used as the original invoice.");
 
-      // A idempotÃªncia Ã© verificada antes das demais regras de criaÃ§Ã£o.
+      // A idempotÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âªncia ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© verificada antes das demais regras de criaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o.
       var existingInvoice = await _dbContext.Invoices
   .AsNoTracking()
   .Include(invoice => invoice.Items)
@@ -261,7 +262,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
       if (existingInvoice is not null)
         return Map(existingInvoice);
 
-      // Somente faturas geradas e disponÃ­veis para cobranÃ§a
+      // Somente faturas geradas e disponÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­veis para cobranÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§a
       // podem originar uma fatura complementar.
       if (originalInvoice.Status != InvoiceStatus.PaymentPending
           && originalInvoice.Status != InvoiceStatus.Paid)
@@ -280,7 +281,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
           originalInvoice.PeriodEnd.ToDateTime(TimeOnly.MinValue),
           TimeSpan.Zero);
 
-      // Somente operaÃ§Ãµes ainda nÃ£o faturadas dentro do perÃ­odo
+      // Somente operaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes ainda nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o faturadas dentro do perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo
       // da fatura original podem entrar na complementar.
       var operations = await _dbContext.Operations
           .Where(operation =>
@@ -325,7 +326,7 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
       _dbContext.Invoices.Add(invoice);
 
-      // Evento especÃ­fico para permitir que os consumidores
+      // Evento especÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­fico para permitir que os consumidores
       // distingam faturamento original de faturamento complementar.
       var eventId = Guid.NewGuid();
 
@@ -415,6 +416,136 @@ public sealed class InvoiceRepository : IInvoiceRepository
         .ToList();
   }
 
+  public async Task<InvoiceDto?> StartPaymentAsync(
+      Guid invoiceId,
+      CancellationToken cancellationToken = default)
+  {
+    if (invoiceId == Guid.Empty)
+      throw new ArgumentException(
+          "Invoice id cannot be empty.",
+          nameof(invoiceId));
+
+    await using var transaction =
+        await _dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
+    var invoice = await _dbContext.Invoices
+        .FromSqlInterpolated(
+            $"SELECT * FROM invoices WHERE id = {invoiceId} FOR UPDATE")
+        .Include(invoice => invoice.Items)
+        .SingleOrDefaultAsync(cancellationToken);
+
+    if (invoice is null)
+    {
+      await transaction.CommitAsync(cancellationToken);
+      return null;
+    }
+
+    if (invoice.Status != InvoiceStatus.PaymentPending)
+    {
+      await transaction.CommitAsync(cancellationToken);
+      return null;
+    }
+
+    invoice.StartPayment();
+
+    await _dbContext.SaveChangesAsync(cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+
+    return Map(invoice);
+  }
+
+  public async Task<InvoiceDto> CompletePaymentAsync(
+      Guid invoiceId,
+      PaymentOutcome outcome,
+      CancellationToken cancellationToken = default)
+  {
+    if (invoiceId == Guid.Empty)
+      throw new ArgumentException(
+          "Invoice id cannot be empty.",
+          nameof(invoiceId));
+
+    await using var transaction =
+        await _dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
+    var invoice = await _dbContext.Invoices
+        .FromSqlInterpolated(
+            $"SELECT * FROM invoices WHERE id = {invoiceId} FOR UPDATE")
+        .Include(invoice => invoice.Items)
+        .SingleOrDefaultAsync(cancellationToken);
+
+    if (invoice is null)
+      throw new InvalidOperationException("Invoice not found.");
+
+    var targetStatus = outcome switch
+    {
+      PaymentOutcome.Approved => InvoiceStatus.Paid,
+      PaymentOutcome.Rejected => InvoiceStatus.PaymentFailed,
+      PaymentOutcome.Unknown => InvoiceStatus.PaymentUnknown,
+      _ => throw new ArgumentOutOfRangeException(nameof(outcome))
+    };
+
+    // Uma repetiÃƒÂ§ÃƒÂ£o do mesmo resultado ÃƒÂ© idempotente.
+    if (invoice.Status == targetStatus)
+    {
+      await transaction.CommitAsync(cancellationToken);
+      return Map(invoice);
+    }
+
+    if (invoice.Status != InvoiceStatus.PaymentProcessing)
+      throw new InvalidOperationException(
+          "Invoice is not in payment processing status.");
+
+    switch (outcome)
+    {
+      case PaymentOutcome.Approved:
+        invoice.MarkPaid();
+        break;
+
+      case PaymentOutcome.Rejected:
+        invoice.MarkPaymentFailed();
+        break;
+
+      case PaymentOutcome.Unknown:
+        invoice.MarkPaymentUnknown();
+        break;
+    }
+
+    var eventId = Guid.NewGuid();
+
+    var messageType = outcome switch
+    {
+      PaymentOutcome.Approved => "InvoicePaid.v1",
+      PaymentOutcome.Rejected => "InvoicePaymentFailed.v1",
+      PaymentOutcome.Unknown => "InvoicePaymentUnknown.v1",
+      _ => throw new ArgumentOutOfRangeException(nameof(outcome))
+    };
+
+    var payload = JsonSerializer.Serialize(new
+    {
+      EventId = eventId,
+      InvoiceId = invoice.Id,
+      CustomerId = invoice.CustomerId,
+      Amount = invoice.Total.Amount,
+      Status = invoice.Status.ToString(),
+      OccurredAt = _timeProvider.GetUtcNow()
+    });
+
+    _dbContext.OutboxMessages.Add(
+        new OutboxMessage(
+            eventId,
+            messageType,
+            invoice.Id,
+            payload));
+
+    await _dbContext.SaveChangesAsync(cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+
+    return Map(invoice);
+  }
   private static InvoiceDto Map(Invoice invoice)
       => new(
           invoice.Id,
@@ -432,6 +563,5 @@ public sealed class InvoiceRepository : IInvoiceRepository
               .ToList());
 
 }
-
 
 

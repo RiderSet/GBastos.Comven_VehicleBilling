@@ -1,9 +1,11 @@
-﻿using Comven_VehicleBilling.Application.Invoices;
+using Comven_VehicleBilling.Application.Invoices;
+using Comven_VehicleBilling.Application.Abstractions.Payments;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
+using Comven_VehicleBilling.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -170,6 +172,228 @@ public sealed class InvoiceRepositoryTests
         }
     }
 
+
+    [Fact]
+    public async Task StartPaymentAsync_ShouldChangeStatusToProcessing()
+    {
+        var connectionString =
+            Environment.GetEnvironmentVariable(
+                "VEHICLE_BILLING_TEST_CONNECTION_STRING");
+
+        Assert.False(string.IsNullOrWhiteSpace(connectionString));
+
+        var options = new DbContextOptionsBuilder<VehicleBillingDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        var customerId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+
+        await using var db = new VehicleBillingDbContext(options);
+
+        try
+        {
+            await CreatePaymentTestDataAsync(
+                db, customerId, invoiceId, operationId);
+
+            var repository = new InvoiceRepository(
+                db,
+                TimeProvider.System);
+
+            var result = await repository.StartPaymentAsync(invoiceId);
+
+            Assert.NotNull(result);
+            Assert.Equal("PaymentProcessing", result.Status);
+
+            var persistedInvoice = await db.Invoices
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == invoiceId);
+
+            Assert.Equal(
+                InvoiceStatus.PaymentProcessing,
+                persistedInvoice.Status);
+
+            var secondAttempt =
+                await repository.StartPaymentAsync(invoiceId);
+
+            Assert.Null(secondAttempt);
+
+            Assert.Empty(await db.OutboxMessages
+                .Where(x => x.AggregateId == invoiceId)
+                .ToListAsync());
+        }
+        finally
+        {
+            await CleanupPaymentTestDataAsync(
+                db, customerId, invoiceId, operationId);
+        }
+    }
+
+    [Theory]
+    [InlineData(
+        PaymentOutcome.Approved,
+        InvoiceStatus.Paid,
+        "InvoicePaid.v1")]
+    [InlineData(
+        PaymentOutcome.Rejected,
+        InvoiceStatus.PaymentFailed,
+        "InvoicePaymentFailed.v1")]
+    [InlineData(
+        PaymentOutcome.Unknown,
+        InvoiceStatus.PaymentUnknown,
+        "InvoicePaymentUnknown.v1")]
+    public async Task CompletePaymentAsync_ShouldPersistOutcomeAndOutboxEvent_AndBeIdempotent(
+        PaymentOutcome outcome,
+        InvoiceStatus expectedStatus,
+        string expectedMessageType)
+    {
+        var connectionString =
+            Environment.GetEnvironmentVariable(
+                "VEHICLE_BILLING_TEST_CONNECTION_STRING");
+
+        Assert.False(string.IsNullOrWhiteSpace(connectionString));
+
+        var options = new DbContextOptionsBuilder<VehicleBillingDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        var customerId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+
+        await using var db = new VehicleBillingDbContext(options);
+
+        try
+        {
+            await CreatePaymentTestDataAsync(
+                db, customerId, invoiceId, operationId);
+
+            var repository = new InvoiceRepository(
+                db,
+                TimeProvider.System);
+
+            var started = await repository.StartPaymentAsync(invoiceId);
+
+            Assert.NotNull(started);
+            Assert.Equal("PaymentProcessing", started.Status);
+
+            var result = await repository.CompletePaymentAsync(
+                invoiceId,
+                outcome);
+
+            Assert.Equal(expectedStatus.ToString(), result.Status);
+
+            var persistedInvoice = await db.Invoices
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == invoiceId);
+
+            Assert.Equal(expectedStatus, persistedInvoice.Status);
+
+            var messages = await db.OutboxMessages
+                .AsNoTracking()
+                .Where(x => x.AggregateId == invoiceId)
+                .ToListAsync();
+
+            var message = Assert.Single(messages);
+
+            Assert.Equal(expectedMessageType, message.MessageType);
+            Assert.False(string.IsNullOrWhiteSpace(message.Payload));
+
+            // Repetir o mesmo resultado não pode criar outro evento.
+            var repeatedResult = await repository.CompletePaymentAsync(
+                invoiceId,
+                outcome);
+
+            Assert.Equal(expectedStatus.ToString(), repeatedResult.Status);
+
+            var finalMessageCount = await db.OutboxMessages
+                .AsNoTracking()
+                .CountAsync(x => x.AggregateId == invoiceId);
+
+            Assert.Equal(1, finalMessageCount);
+        }
+        finally
+        {
+            await CleanupPaymentTestDataAsync(
+                db, customerId, invoiceId, operationId);
+        }
+    }
+
+    private static async Task CreatePaymentTestDataAsync(
+        VehicleBillingDbContext db,
+        Guid customerId,
+        Guid invoiceId,
+        Guid operationId)
+    {
+        var customer = new Customer(
+            customerId,
+            $"Payment Integration Test {customerId:N}",
+            CustomerPlan.Postpaid,
+            Money.Zero,
+            new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
+
+        db.Customers.Add(customer);
+
+        var operation = new Operation(
+            operationId,
+            Guid.NewGuid(),
+            customerId,
+            OperationType.VehicleConsultation,
+            Money.Of(12.50m),
+            Guid.NewGuid().ToString("N"),
+            new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+
+        operation.MarkAwaitingInvoice();
+
+        db.Operations.Add(operation);
+
+        var invoice = new Invoice(
+            invoiceId,
+            customerId,
+            new DateOnly(2026, 10, 1),
+            new DateOnly(2026, 11, 1),
+            new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+
+        invoice.AddItem(
+            new InvoiceItem(
+                invoiceId,
+                operationId,
+                Money.Of(12.50m)));
+
+        invoice.FinalizeInvoice();
+
+        db.Invoices.Add(invoice);
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task CleanupPaymentTestDataAsync(
+        VehicleBillingDbContext db,
+        Guid customerId,
+        Guid invoiceId,
+        Guid operationId)
+    {
+        await db.OutboxMessages
+            .Where(x => x.AggregateId == invoiceId)
+            .ExecuteDeleteAsync();
+
+        await db.InvoiceItems
+            .Where(x => x.InvoiceId == invoiceId)
+            .ExecuteDeleteAsync();
+
+        await db.Invoices
+            .Where(x => x.Id == invoiceId)
+            .ExecuteDeleteAsync();
+
+        await db.Operations
+            .Where(x => x.Id == operationId)
+            .ExecuteDeleteAsync();
+
+        await db.Customers
+            .Where(x => x.Id == customerId)
+            .ExecuteDeleteAsync();
+    }
     private sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _utcNow;

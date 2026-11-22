@@ -24,8 +24,9 @@ public sealed class Invoice
     public InvoiceStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
+  public string? ExternalPaymentId { get; private set; }
 
-    public Customer Customer { get; private set; } = null!;
+  public Customer Customer { get; private set; } = null!;
 
     public IReadOnlyCollection<InvoiceItem> Items
         => _items.AsReadOnly();
@@ -171,6 +172,14 @@ public sealed class Invoice
         Status = InvoiceStatus.PaymentFailed;
     }
 
+    public void MarkPaymentUnknown()
+    {
+        if (Status != InvoiceStatus.PaymentProcessing)
+            throw new InvalidOperationException(
+                "Invoice payment can only become unknown while processing.");
+
+        Status = InvoiceStatus.PaymentUnknown;
+    }
     public void RequireReconciliation()
     {
         if (Status != InvoiceStatus.PaymentUnknown)
@@ -187,4 +196,32 @@ public sealed class Invoice
 
         Total = total;
     }
+
+  public void RegisterExternalPaymentId(string externalPaymentId)
+  {
+    if (string.IsNullOrWhiteSpace(externalPaymentId))
+      throw new ArgumentException(
+          "O identificador externo do pagamento é obrigatório.",
+          nameof(externalPaymentId));
+
+    externalPaymentId = externalPaymentId.Trim();
+
+    if (externalPaymentId.Length > 200)
+      throw new ArgumentException(
+          "O identificador externo do pagamento não pode exceder 200 caracteres.",
+          nameof(externalPaymentId));
+
+    if (!string.IsNullOrWhiteSpace(ExternalPaymentId) &&
+        !string.Equals(
+            ExternalPaymentId,
+            externalPaymentId,
+            StringComparison.Ordinal))
+    {
+      throw new InvalidOperationException(
+          "A fatura já possui outro identificador externo de pagamento.");
+    }
+
+    ExternalPaymentId = externalPaymentId;
+  }
+
 }
