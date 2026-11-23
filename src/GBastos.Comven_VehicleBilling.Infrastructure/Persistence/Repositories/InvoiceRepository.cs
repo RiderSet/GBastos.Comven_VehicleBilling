@@ -593,5 +593,8 @@ public sealed class InvoiceRepository : IInvoiceRepository
               .Select(item => new InvoiceItemDto(
                   item.OperationId,
                   item.Amount.Amount))
-              .ToList());
+              .ToList())
+      {
+        ExternalPaymentId = invoice.ExternalPaymentId
+      };
 }

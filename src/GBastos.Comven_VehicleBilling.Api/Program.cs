@@ -3,6 +3,7 @@ using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Comven_VehicleBilling.Api.Time;
 
 // Localiza o .env na raiz do repositório.
 static string? FindEnvFile()
@@ -79,6 +80,18 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+if (builder.Environment.IsDevelopment())
+{
+  var simulatedNow = builder.Configuration[
+      "VEHICLE_BILLING_TEST_NOW_UTC"];
+
+  if (!string.IsNullOrWhiteSpace(simulatedNow))
+  {
+    builder.Services.AddSingleton<TimeProvider>(
+        new DevelopmentTimeProvider(simulatedNow));
+  }
+}
 
 var app = builder.Build();
 

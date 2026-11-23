@@ -16,4 +16,5 @@ public sealed record InvoiceDto(
     IReadOnlyList<InvoiceItemDto> Items)
 {
   public bool IsSupplementary => OriginalInvoiceId.HasValue;
+  public string? ExternalPaymentId { get; init; }
 }

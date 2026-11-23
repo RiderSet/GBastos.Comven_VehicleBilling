@@ -43,6 +43,19 @@ builder.Configuration
 // Registra PostgreSQL, repositÃƒÂ³rio da Outbox e RabbitMQ.
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Utiliza o mesmo relógio simulado da API durante os testes funcionais.
+if (builder.Environment.IsDevelopment())
+{
+  var simulatedNow = builder.Configuration[
+      "VEHICLE_BILLING_TEST_NOW_UTC"];
+
+  if (!string.IsNullOrWhiteSpace(simulatedNow))
+  {
+    builder.Services.AddSingleton<TimeProvider>(
+        new DevelopmentTimeProvider(simulatedNow));
+  }
+}
+
 // Handlers e consumidores de mensagens.
 builder.Services.AddScoped<IOperationCreatedHandler, OperationCreatedHandler>();
 builder.Services.AddScoped<OperationRefundedHandler>();
