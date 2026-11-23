@@ -39,6 +39,114 @@ public sealed class InvoicePaymentServiceTests
   }
 
   [Fact]
+  public async Task PayAsync_ShouldReconcileUnknownPaymentAsApproved()
+  {
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice =
+        FakeInvoiceRepository.CreateInvoice("PaymentUnknown");
+
+    _provider.ReconciliationResult =
+        new PaymentResult(PaymentOutcome.Approved, "external-reconciled-001", null);
+
+    var result = await CreateService().PayAsync(
+        _repository.ExistingInvoice.Id);
+
+    Assert.Equal("Paid", result.Status);
+    Assert.Equal(0, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(
+        _repository.ExistingInvoice.Id.ToString("N"),
+        _provider.LastQueriedIdempotencyKey);
+    Assert.Equal(PaymentOutcome.Approved, _repository.LastOutcome);
+    Assert.Equal("external-reconciled-001", _repository.LastExternalPaymentId);
+  }
+
+  [Fact]
+  public async Task PayAsync_ShouldKeepUnknownWhenProviderDoesNotFindPayment()
+  {
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice =
+        FakeInvoiceRepository.CreateInvoice("PaymentUnknown");
+
+    _provider.ReconciliationResult = null;
+
+    var result = await CreateService().PayAsync(
+        _repository.ExistingInvoice.Id);
+
+    Assert.Equal("PaymentUnknown", result.Status);
+    Assert.Equal(0, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(0, _repository.CompletePaymentCalls);
+  }
+
+  [Fact]
+  public async Task PayAsync_ShouldReconcileInterruptedProcessingPayment()
+  {
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice =
+        FakeInvoiceRepository.CreateInvoice("PaymentProcessing");
+
+    _provider.ReconciliationResult =
+        new PaymentResult(
+            PaymentOutcome.Approved,
+            "external-recovered-001",
+            null);
+
+    var invoice = _repository.ExistingInvoice;
+
+    var result = await CreateService().PayAsync(invoice.Id);
+
+    Assert.Equal("Paid", result.Status);
+    Assert.Equal(0, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(
+        invoice.Id.ToString("N"),
+        _provider.LastQueriedIdempotencyKey);
+    Assert.Equal(PaymentOutcome.Approved, _repository.LastOutcome);
+    Assert.Equal(
+        "external-recovered-001",
+        _repository.LastExternalPaymentId);
+  }
+
+  [Fact]
+  public async Task PayAsync_ShouldKeepProcessingWhenInterruptedPaymentIsNotFound()
+  {
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice =
+        FakeInvoiceRepository.CreateInvoice("PaymentProcessing");
+
+    _provider.ReconciliationResult = null;
+
+    var invoice = _repository.ExistingInvoice;
+
+    var result = await CreateService().PayAsync(invoice.Id);
+
+    Assert.Equal("PaymentProcessing", result.Status);
+    Assert.Equal(0, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(0, _repository.CompletePaymentCalls);
+  }
+
+  [Fact]
+  public async Task PayAsync_ShouldKeepUnknownWhenReconciliationIsUnknown()
+  {
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice =
+        FakeInvoiceRepository.CreateInvoice("PaymentUnknown");
+
+    _provider.ReconciliationResult =
+        new PaymentResult(PaymentOutcome.Unknown, null, "Ainda inconclusivo");
+
+    var result = await CreateService().PayAsync(
+        _repository.ExistingInvoice.Id);
+
+    Assert.Equal("PaymentUnknown", result.Status);
+    Assert.Equal(0, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(PaymentOutcome.Unknown, _repository.LastOutcome);
+  }
+
+  [Fact]
   public async Task PayAsync_ShouldNotCallProviderWhenPaymentCannotStart()
   {
     _repository.StartPaymentResult = null;
@@ -166,6 +274,8 @@ public sealed class InvoicePaymentServiceTests
 
     public int GetPaymentCalls { get; private set; }
 
+    public CancellationToken LastGetPaymentCancellationToken { get; private set; }
+
     public string? LastQueriedIdempotencyKey { get; private set; }
 
     public PaymentResult Result { get; set; } =
@@ -188,11 +298,12 @@ public sealed class InvoicePaymentServiceTests
     }
 
     public Task<PaymentResult?> GetPaymentAsync(
-    string idempotencyKey,
-    CancellationToken cancellationToken = default)
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
     {
       GetPaymentCalls++;
       LastQueriedIdempotencyKey = idempotencyKey;
+      LastGetPaymentCancellationToken = cancellationToken;
 
       return Task.FromResult(ReconciliationResult);
     }
@@ -214,6 +325,8 @@ public sealed class InvoicePaymentServiceTests
     public int GetByIdCalls { get; private set; }
 
     public int CompletePaymentCalls { get; private set; }
+
+    public string? LastExternalPaymentId { get; private set; }
 
     public PaymentOutcome? LastOutcome { get; private set; }
 
@@ -274,13 +387,15 @@ public sealed class InvoicePaymentServiceTests
     }
 
     public Task<InvoiceDto> CompletePaymentAsync(
-        Guid invoiceId,
-        PaymentOutcome outcome,
-        CancellationToken cancellationToken = default)
+    Guid invoiceId,
+    PaymentOutcome outcome,
+    CancellationToken cancellationToken = default,
+    string? externalPaymentId = null)
     {
       CompletePaymentCalls++;
       LastOutcome = outcome;
       LastCompletionToken = cancellationToken;
+      LastExternalPaymentId = externalPaymentId;
 
       var status = outcome switch
       {

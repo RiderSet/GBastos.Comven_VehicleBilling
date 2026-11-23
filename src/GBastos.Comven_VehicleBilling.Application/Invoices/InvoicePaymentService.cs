@@ -41,8 +41,12 @@ public sealed class InvoicePaymentService
       if (existingInvoice is null)
         throw new InvalidOperationException("Fatura não encontrada.");
 
-      // A fatura existe, mas não pode iniciar outro pagamento.
-      return existingInvoice;
+      if (!RequiresReconciliation(existingInvoice.Status))
+        return existingInvoice;
+
+      return await ReconcilePaymentAsync(
+          existingInvoice,
+          cancellationToken);
     }
 
     if (!string.Equals(
@@ -53,13 +57,7 @@ public sealed class InvoicePaymentService
       return invoice;
     }
 
-    var idempotencyKey = invoice.Id.ToString("N");
-
-    var request = new PaymentRequest(
-        invoice.Id,
-        invoice.CustomerId,
-        invoice.Amount,
-        idempotencyKey);
+    var request = CreatePaymentRequest(invoice);
 
     PaymentResult result;
 
@@ -71,8 +69,8 @@ public sealed class InvoicePaymentService
     }
     catch
     {
-      // Uma falha de comunicação pode ocorrer depois da cobrança.
-      // Não presumimos que o pagamento foi rejeitado.
+      // Uma falha de comunicação não significa rejeição.
+      // A cobrança pode ter sido realizada pelo provedor.
       await _repository.CompletePaymentAsync(
           invoice.Id,
           PaymentOutcome.Unknown,
@@ -84,6 +82,51 @@ public sealed class InvoicePaymentService
     return await _repository.CompletePaymentAsync(
         invoice.Id,
         result.Outcome,
+        cancellationToken,
+        result.ExternalPaymentId);
+  }
+
+  private async Task<InvoiceDto> ReconcilePaymentAsync(
+      InvoiceDto invoice,
+      CancellationToken cancellationToken)
+  {
+    var idempotencyKey = invoice.Id.ToString("N");
+
+    // Consulta exclusivamente a cobrança original.
+    // Nunca inicia uma segunda cobrança durante a reconciliação.
+    var result = await _paymentProvider.GetPaymentAsync(
+        idempotencyKey,
         cancellationToken);
+
+    if (result is null)
+      return invoice;
+
+    return await _repository.CompletePaymentAsync(
+        invoice.Id,
+        result.Outcome,
+        cancellationToken,
+        result.ExternalPaymentId);
+  }
+
+  private static bool RequiresReconciliation(string status)
+      => string.Equals(
+             status,
+             "PaymentUnknown",
+             StringComparison.Ordinal)
+         || string.Equals(
+             status,
+             "PaymentProcessing",
+             StringComparison.Ordinal);
+
+  private static PaymentRequest CreatePaymentRequest(
+      InvoiceDto invoice)
+  {
+    var idempotencyKey = invoice.Id.ToString("N");
+
+    return new PaymentRequest(
+        invoice.Id,
+        invoice.CustomerId,
+        invoice.Amount,
+        idempotencyKey);
   }
 }
