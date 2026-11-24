@@ -4,6 +4,7 @@ using Comven_VehicleBilling.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Comven_VehicleBilling.Api.Time;
+using Comven_VehicleBilling.Application.Invoices;
 
 // Localiza o .env na raiz do repositório.
 static string? FindEnvFile()
@@ -109,6 +110,18 @@ app.UseExceptionHandler(errorApp =>
           "Erro não tratado em {Method} {Path}",
           context.Request.Method,
           context.Request.Path);
+    }
+
+    if (exception is ExternalPaymentIdConflictException conflictException)
+    {
+      await Results.Problem(
+          statusCode: StatusCodes.Status409Conflict,
+          title: "Conflito no pagamento",
+          detail: conflictException.Message,
+          instance: context.Request.Path)
+          .ExecuteAsync(context);
+
+      return;
     }
 
     var detail = app.Environment.IsDevelopment()

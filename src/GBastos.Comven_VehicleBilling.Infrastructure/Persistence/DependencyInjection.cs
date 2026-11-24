@@ -1,4 +1,4 @@
-﻿using Comven_VehicleBilling.Infrastructure.PaymentsProvider;
+using Comven_VehicleBilling.Infrastructure.PaymentsProvider;
 using Comven_VehicleBilling.Application.Abstractions.Payments;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Abstractions.Billing;
@@ -51,8 +51,8 @@ public static class DependencyInjection
           "A connectionstring 'DefaultConnection' nÃ£o foi configurada.");
     }
 
-    services.AddDbContext<VehicleBillingDbContext>(options =>
-        options.UseNpgsql(connectionString));
+    services.AddDbContextFactory<VehicleBillingDbContext>(options =>
+    options.UseNpgsql(connectionString));
   }
 }
 

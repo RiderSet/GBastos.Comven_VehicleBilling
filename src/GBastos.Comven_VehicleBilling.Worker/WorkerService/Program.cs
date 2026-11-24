@@ -1,6 +1,7 @@
 using Comven_VehicleBilling.Infrastructure.Persistence;
 using Comven_VehicleBilling.Worker.Workers;
 using Comven_VehicleBilling.WorkerService;
+using Comven_VehicleBilling.Application;
 using Comven_VehicleBilling.WorkerService.Events;
 
 static string? FindEnvFile()
@@ -40,7 +41,10 @@ builder.Configuration
         reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// Registra PostgreSQL, repositÃƒÂ³rio da Outbox e RabbitMQ.
+// Registra os serviços da camada Application.
+builder.Services.AddApplication();
+
+// Registra PostgreSQL, repositórios, provedores e RabbitMQ.
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Utiliza o mesmo relógio simulado da API durante os testes funcionais.

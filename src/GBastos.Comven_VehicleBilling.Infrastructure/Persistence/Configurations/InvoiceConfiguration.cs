@@ -41,6 +41,10 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         .HasMaxLength(200)
         .IsRequired(false);
 
+    builder.HasIndex(x => x.ExternalPaymentId)
+    .IsUnique()
+    .HasFilter("\"external_payment_id\" IS NOT NULL");
+
     builder.HasIndex(invoice => new
     {
         invoice.OriginalInvoiceId,

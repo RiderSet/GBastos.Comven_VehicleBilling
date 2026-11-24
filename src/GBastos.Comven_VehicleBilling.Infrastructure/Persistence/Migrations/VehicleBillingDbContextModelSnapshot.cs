@@ -146,6 +146,10 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExternalPaymentId")
+                        .IsUnique()
+                        .HasFilter("\"external_payment_id\" IS NOT NULL");
+
                     b.HasIndex("OriginalInvoiceId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ux_invoices_original_idempotency")
@@ -383,6 +387,59 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                     b.ToTable("outbox_messages", (string)null);
                 });
 
+            modelBuilder.Entity("Comven_VehicleBilling.Infrastructure.PaymentsProvider.PaymentProviderTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ExternalPaymentId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_payment_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_payment_provider_transactions_idempotency_key");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.ToTable("payment_provider_transactions", (string)null);
+                });
+
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.BalanceCredit", b =>
                 {
                     b.HasOne("Comven_VehicleBilling.Domain.Entities.Customer", "Customer")
@@ -465,6 +522,15 @@ namespace Comven_VehicleBilling.Infrastructure.Persistence.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("Comven_VehicleBilling.Infrastructure.PaymentsProvider.PaymentProviderTransaction", b =>
+                {
+                    b.HasOne("Comven_VehicleBilling.Domain.Entities.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Comven_VehicleBilling.Domain.Entities.Invoice", b =>

@@ -8,6 +8,7 @@ using Comven_VehicleBilling.Domain.Rules;
 using Comven_VehicleBilling.Domain.ValueObjects;
 using Comven_VehicleBilling.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Comven_VehicleBilling.Infrastructure.Persistence.Repositories;
 
@@ -482,6 +483,11 @@ public sealed class InvoiceRepository : IInvoiceRepository
     if (invoice is null)
       throw new InvalidOperationException("Invoice not found.");
 
+    // O EF Core pode devolver uma entidade já rastreada,
+    // sem atualizar seus valores com os dados do PostgreSQL.
+    // Recarrega a fatura enquanto a transação mantém o FOR UPDATE.
+    await _dbContext.Entry(invoice).ReloadAsync(cancellationToken);
+
     if (!string.IsNullOrWhiteSpace(externalPaymentId))
     {
       invoice.RegisterExternalPaymentId(
@@ -506,7 +512,22 @@ public sealed class InvoiceRepository : IInvoiceRepository
     // Uma repetição do mesmo resultado é idempotente.
     if (invoice.Status == targetStatus)
     {
-      await _dbContext.SaveChangesAsync(cancellationToken);
+      try
+      {
+        await _dbContext.SaveChangesAsync(cancellationToken);
+      }
+      catch (DbUpdateException exception)
+          when (IsExternalPaymentIdUniqueViolation(exception))
+      {
+        // A transação PostgreSQL que sofreu a violação
+        // não pode continuar sendo utilizada.
+        await transaction.RollbackAsync(CancellationToken.None);
+
+        // Descarta as entidades rastreadas pelo EF Core.
+        _dbContext.ChangeTracker.Clear();
+
+        throw new ExternalPaymentIdConflictException(exception);
+      }
 
       await transaction.CommitAsync(cancellationToken);
 
@@ -572,11 +593,45 @@ public sealed class InvoiceRepository : IInvoiceRepository
             invoice.Id,
             payload));
 
-    await _dbContext.SaveChangesAsync(cancellationToken);
+    // Persiste o estado da fatura e o evento Outbox
+    // na mesma transação.
+    try
+    {
+      await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+    catch (DbUpdateException exception)
+        when (IsExternalPaymentIdUniqueViolation(exception))
+    {
+      await transaction.RollbackAsync(CancellationToken.None);
+      _dbContext.ChangeTracker.Clear();
+
+      throw new ExternalPaymentIdConflictException(exception);
+    }
 
     await transaction.CommitAsync(cancellationToken);
 
     return Map(invoice);
+  }
+
+  private static bool IsExternalPaymentIdUniqueViolation(
+    DbUpdateException exception)
+  {
+    for (Exception? current = exception;
+         current is not null;
+         current = current.InnerException)
+    {
+      if (current is PostgresException postgresException &&
+          postgresException.SqlState == PostgresErrorCodes.UniqueViolation &&
+          string.Equals(
+              postgresException.ConstraintName,
+              "IX_invoices_external_payment_id",
+              StringComparison.Ordinal))
+      {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private static InvoiceDto Map(Invoice invoice)

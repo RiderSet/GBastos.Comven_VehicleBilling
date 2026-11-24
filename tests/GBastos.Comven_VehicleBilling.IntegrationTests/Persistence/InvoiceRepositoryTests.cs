@@ -169,9 +169,9 @@ public sealed class InvoiceRepositoryTests
     }
   }
 
-[Fact]
-public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeriodCloses()
-{
+  [Fact]
+  public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeriodCloses()
+  {
     var connectionString =
         Environment.GetEnvironmentVariable(
             "VEHICLE_BILLING_TEST_CONNECTION_STRING");
@@ -191,104 +191,104 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
 
     try
     {
-        db.Customers.Add(new Customer(
-            customerId,
-            $"November Invoice Test {customerId:N}",
-            CustomerPlan.Postpaid,
-            Money.Zero,
-            new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero)));
+      db.Customers.Add(new Customer(
+          customerId,
+          $"November Invoice Test {customerId:N}",
+          CustomerPlan.Postpaid,
+          Money.Zero,
+          new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero)));
 
-        AddAwaitingInvoiceOperation(
-            db,
-            operationId,
-            customerId,
-            OperationType.VehicleConsultation,
-            12.50m,
-            new DateTimeOffset(2026, 11, 5, 12, 0, 0, TimeSpan.Zero));
+      AddAwaitingInvoiceOperation(
+          db,
+          operationId,
+          customerId,
+          OperationType.VehicleConsultation,
+          12.50m,
+          new DateTimeOffset(2026, 11, 5, 12, 0, 0, TimeSpan.Zero));
 
-        await db.SaveChangesAsync();
+      await db.SaveChangesAsync();
 
-        var command = new CreateInvoiceCommand(
-            customerId,
-            new DateOnly(2026, 11, 23));
+      var command = new CreateInvoiceCommand(
+          customerId,
+          new DateOnly(2026, 11, 23));
 
-        // Novembro ainda está aberto.
-        var openPeriodRepository = new InvoiceRepository(
-            db,
-            new FixedTimeProvider(
-                new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.Zero)));
+      // Novembro ainda estÃ¡ aberto.
+      var openPeriodRepository = new InvoiceRepository(
+          db,
+          new FixedTimeProvider(
+              new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.Zero)));
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => openPeriodRepository.CreateAsync(command));
+      var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+          () => openPeriodRepository.CreateAsync(command));
 
-        Assert.Equal(
-            "O período de faturamento ainda não pode gerar uma fatura.",
-            exception.Message);
+      Assert.Equal(
+  "O período de faturamento ainda não pode gerar uma fatura.",
+  exception.Message);
 
-        // Dezembro começou: novembro está fechado.
-        var closedPeriodRepository = new InvoiceRepository(
+      // Dezembro comeÃ§ou: novembro estÃ¡ fechado.
+      var closedPeriodRepository = new InvoiceRepository(
             db,
             new FixedTimeProvider(
                 new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero)));
 
-        var result = await closedPeriodRepository.CreateAsync(command);
+      var result = await closedPeriodRepository.CreateAsync(command);
 
-        invoiceId = result.Id;
+      invoiceId = result.Id;
 
-        Assert.Equal(customerId, result.CustomerId);
-        Assert.Equal(new DateOnly(2026, 11, 1), result.PeriodStart);
-        Assert.Equal(new DateOnly(2026, 12, 1), result.PeriodEnd);
-        Assert.Equal(12.50m, result.Amount);
-        Assert.Single(result.Items);
+      Assert.Equal(customerId, result.CustomerId);
+      Assert.Equal(new DateOnly(2026, 11, 1), result.PeriodStart);
+      Assert.Equal(new DateOnly(2026, 12, 1), result.PeriodEnd);
+      Assert.Equal(12.50m, result.Amount);
+      Assert.Single(result.Items);
 
-        Assert.Equal(operationId, result.Items[0].OperationId);
+      Assert.Equal(operationId, result.Items[0].OperationId);
 
-        var operation = await db.Operations
-            .SingleAsync(x => x.Id == operationId);
+      var operation = await db.Operations
+          .SingleAsync(x => x.Id == operationId);
 
-        Assert.Equal(OperationStatus.Invoiced, operation.Status);
-        Assert.Equal(result.Id, operation.InvoiceId);
+      Assert.Equal(OperationStatus.Invoiced, operation.Status);
+      Assert.Equal(result.Id, operation.InvoiceId);
 
-        var repeatedResult = await closedPeriodRepository.CreateAsync(command);
+      var repeatedResult = await closedPeriodRepository.CreateAsync(command);
 
-        Assert.Equal(result.Id, repeatedResult.Id);
+      Assert.Equal(result.Id, repeatedResult.Id);
 
-        Assert.Equal(
-            1,
-            await db.Invoices.CountAsync(
-                x => x.CustomerId == customerId));
+      Assert.Equal(
+          1,
+          await db.Invoices.CountAsync(
+              x => x.CustomerId == customerId));
 
-        Assert.Equal(
-            1,
-            await db.OutboxMessages.CountAsync(
-                x => x.AggregateId == result.Id));
+      Assert.Equal(
+          1,
+          await db.OutboxMessages.CountAsync(
+              x => x.AggregateId == result.Id));
     }
     finally
     {
-        if (invoiceId.HasValue)
-        {
-            await db.OutboxMessages
-                .Where(x => x.AggregateId == invoiceId.Value)
-                .ExecuteDeleteAsync();
-        }
-
-        await db.InvoiceItems
-            .Where(x => x.Invoice.CustomerId == customerId)
+      if (invoiceId.HasValue)
+      {
+        await db.OutboxMessages
+            .Where(x => x.AggregateId == invoiceId.Value)
             .ExecuteDeleteAsync();
+      }
 
-        await db.Operations
-            .Where(x => x.CustomerId == customerId)
-            .ExecuteDeleteAsync();
+      await db.InvoiceItems
+          .Where(x => x.Invoice.CustomerId == customerId)
+          .ExecuteDeleteAsync();
 
-        await db.Invoices
-            .Where(x => x.CustomerId == customerId)
-            .ExecuteDeleteAsync();
+      await db.Operations
+          .Where(x => x.CustomerId == customerId)
+          .ExecuteDeleteAsync();
 
-        await db.Customers
-            .Where(x => x.Id == customerId)
-            .ExecuteDeleteAsync();
+      await db.Invoices
+          .Where(x => x.CustomerId == customerId)
+          .ExecuteDeleteAsync();
+
+      await db.Customers
+          .Where(x => x.Id == customerId)
+          .ExecuteDeleteAsync();
     }
-}
+  }
 
 
   [Fact]
@@ -418,7 +418,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
       Assert.Equal(expectedMessageType, message.MessageType);
       Assert.False(string.IsNullOrWhiteSpace(message.Payload));
 
-      // Repetir o mesmo resultado não pode criar outro evento.
+      // Repetir o mesmo resultado nÃ£o pode criar outro evento.
       var repeatedResult = await repository.CompletePaymentAsync(
           invoiceId,
           outcome);
@@ -558,7 +558,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
       Assert.NotNull(started);
       Assert.Equal("PaymentProcessing", started.Status);
 
-      // 2. Simula a perda de comunicação com o provedor.
+      // 2. Simula a perda de comunicaÃ§Ã£o com o provedor.
       var unknown = await repository.CompletePaymentAsync(
           invoiceId,
           PaymentOutcome.Unknown);
@@ -566,7 +566,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
       Assert.Equal("PaymentUnknown", unknown.Status);
 
       // 3. Reconcilia o pagamento original.
-      // Não existe uma nova chamada de cobrança nesta etapa.
+      // NÃ£o existe uma nova chamada de cobranÃ§a nesta etapa.
       var reconciled = await repository.CompletePaymentAsync(
           invoiceId,
           reconciliationOutcome,
@@ -574,7 +574,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
 
       Assert.Equal(expectedStatus.ToString(), reconciled.Status);
 
-      // 4. Confirma a persistência no PostgreSQL.
+      // 4. Confirma a persistÃªncia no PostgreSQL.
       var persistedInvoice = await db.Invoices
           .AsNoTracking()
           .SingleAsync(x => x.Id == invoiceId);
@@ -584,7 +584,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
           externalPaymentId,
           persistedInvoice.ExternalPaymentId);
 
-      // 5. Confirma os eventos Outbox das duas transições.
+      // 5. Confirma os eventos Outbox das duas transiÃ§Ãµes.
       var messages = await db.OutboxMessages
           .AsNoTracking()
           .Where(x => x.AggregateId == invoiceId)
@@ -592,7 +592,7 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
           .ToListAsync();
 
 
-      // 5. Confirma que o identificador externo também é devolvido pelo DTO.
+      // 5. Confirma que o identificador externo tambÃ©m Ã© devolvido pelo DTO.
       var invoiceDto = await repository.GetByIdAsync(
           invoiceId,
           CancellationToken.None);
@@ -608,6 +608,29 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
       await CleanupPaymentTestDataAsync(
           db, customerId, invoiceId, operationId);
     }
+  }
+
+  private static VehicleBillingDbContext CreateDbContext()
+  {
+    var connectionString =
+        Environment.GetEnvironmentVariable(
+            "VEHICLE_BILLING_TEST_CONNECTION_STRING");
+
+    Assert.False(
+        string.IsNullOrWhiteSpace(connectionString),
+        "Configure VEHICLE_BILLING_TEST_CONNECTION_STRING.");
+
+    var connection =
+        new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+
+    Assert.Equal("vehicle_billing_test", connection.Database);
+
+    var options =
+        new DbContextOptionsBuilder<VehicleBillingDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+    return new VehicleBillingDbContext(options);
   }
 
   private static async Task CreatePaymentTestDataAsync(
@@ -717,6 +740,155 @@ public async Task CreateAsync_ShouldRejectOpenPeriod_AndGenerateInvoiceAfterPeri
 
     db.Operations.Add(operation);
   }
+
+  [Fact]
+  public async Task PayAsync_MustChargeOnlyOnce_WhenTwoRequestsAreConcurrent()
+  {
+    var customerId = Guid.NewGuid();
+    var invoiceId = Guid.NewGuid();
+    var operationId = Guid.NewGuid();
+
+    await using (var setupDb = CreateDbContext())
+    {
+      await CreatePaymentTestDataAsync(
+          setupDb,
+          customerId,
+          invoiceId,
+          operationId);
+    }
+
+    var provider = new ControlledPaymentProvider();
+
+    try
+    {
+      await using var firstDb = CreateDbContext();
+      await using var secondDb = CreateDbContext();
+
+      var firstService = new InvoicePaymentService(
+          new InvoiceRepository(firstDb, TimeProvider.System),
+          provider);
+
+      var secondService = new InvoicePaymentService(
+          new InvoiceRepository(secondDb, TimeProvider.System),
+          provider);
+
+      // A primeira solicitação inicia a cobrança e fica aguardando
+      // a liberação controlada pelo teste.
+      var firstTask = firstService.PayAsync(invoiceId);
+
+      await provider.ProcessStarted;
+
+      // A segunda solicitação encontra PaymentProcessing.
+      // Deve consultar a cobrança existente, sem iniciar outra.
+      var secondResult = await secondService.PayAsync(invoiceId);
+
+      Assert.Equal("Paid", secondResult.Status);
+      Assert.Equal(1, provider.ProcessCallCount);
+      Assert.Equal(1, provider.LookupCallCount);
+
+      // Libera a primeira solicitação para concluir.
+      provider.ReleaseProcess();
+
+      var firstResult = await firstTask;
+
+      Assert.Equal("Paid", firstResult.Status);
+      Assert.Equal(secondResult.ExternalPaymentId, firstResult.ExternalPaymentId);
+
+      Assert.Equal(1, provider.ProcessCallCount);
+      Assert.Equal(1, provider.LookupCallCount);
+
+      // Confirma o estado definitivo persistido no PostgreSQL.
+      await using var verificationDb = CreateDbContext();
+
+      var persistedInvoice = await verificationDb.Invoices
+          .AsNoTracking()
+          .SingleAsync(x => x.Id == invoiceId);
+
+      Assert.Equal(InvoiceStatus.Paid, persistedInvoice.Status);
+      Assert.Equal(
+          $"PAY-{invoiceId:N}",
+          persistedInvoice.ExternalPaymentId);
+
+      // A concorrência não pode gerar dois eventos de pagamento aprovado.
+      var paidEvents = await verificationDb.OutboxMessages
+          .CountAsync(x =>
+              x.AggregateId == invoiceId &&
+              x.MessageType == "InvoicePaid.v1");
+
+      Assert.Equal(1, paidEvents);
+    }
+    finally
+    {
+      await using var cleanupDb = CreateDbContext();
+
+      await CleanupPaymentTestDataAsync(
+          cleanupDb,
+          customerId,
+          invoiceId,
+          operationId);
+    }
+  }
+
+  private sealed class ControlledPaymentProvider : IPaymentProvider
+  {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<
+        string,
+        PaymentResult> _payments = new();
+
+    private readonly TaskCompletionSource<bool> _processStarted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private readonly TaskCompletionSource<bool> _allowProcessCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private int _processCallCount;
+    private int _lookupCallCount;
+
+    public Task ProcessStarted => _processStarted.Task;
+
+    public int ProcessCallCount => Volatile.Read(ref _processCallCount);
+
+    public int LookupCallCount => Volatile.Read(ref _lookupCallCount);
+
+    public async Task<PaymentResult> ProcessPaymentAsync(
+        PaymentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+      Interlocked.Increment(ref _processCallCount);
+
+      var result = new PaymentResult(
+          PaymentOutcome.Approved,
+          $"PAY-{request.IdempotencyKey}",
+          null);
+
+      _payments.TryAdd(request.IdempotencyKey, result);
+
+      _processStarted.TrySetResult(true);
+
+      await _allowProcessCompletion.Task.WaitAsync(cancellationToken);
+
+      return result;
+    }
+
+    public Task<PaymentResult?> GetPaymentAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+      cancellationToken.ThrowIfCancellationRequested();
+
+      Interlocked.Increment(ref _lookupCallCount);
+
+      _payments.TryGetValue(idempotencyKey, out var payment);
+
+      return Task.FromResult<PaymentResult?>(payment);
+    }
+
+    public void ReleaseProcess()
+    {
+      _allowProcessCompletion.TrySetResult(true);
+    }
+  }
 }
+
 
 

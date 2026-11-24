@@ -1,0 +1,323 @@
+Enquanto está carregando o Docker, aproveite e me fale sobre o fluxo normal do sistema como um todo. Pode ser?
+
+Claro. E vale a pena fazer isso agora, porque o projeto já está chegando num ponto em que o fluxo completo fica mais importante do que olhar cada serviço isoladamente.
+No GBastos.Comven_VehicleBilling, eu enxergaria o fluxo normal assim:
+
+
+1. Cliente → API
+O sistema externo/simulador envia uma operação:
+
+POST /api/operations
+Com algo semelhante a:
+
+ExternalOperationId
+CustomerId
+OperationType
+Amount
+A API recebe e valida a requisição.
+
+2. Identificação e idempotência
+Antes de produzir qualquer efeito financeiro, o sistema verifica:
+
+Customer existe?
+        ↓
+ExternalOperationId já foi processado?
+        ↓
+RequestHash é compatível?
+Isso é fundamental.
+
+Se o mesmo request chegar novamente por causa de retry:
+
+mesma operação
+     ↓
+já processada
+     ↓
+não cobra novamente
+     ↓
+retorna o resultado existente
+Ou seja, o cliente pode repetir a chamada sem gerar uma segunda cobrança.
+
+3. Decide o tipo de faturamento
+O sistema identifica o modelo do cliente:
+
+                    Cliente
+                       │
+              ┌────────┴────────┐
+              │                 │
+          PREPAID            POSTPAID
+              │                 │
+              ▼                 ▼
+       cobra imediatamente   registra consumo
+Pré-pago
+Se houver saldo suficiente:
+
+Operação
+   ↓
+Debit
+   ↓
+Ledger
+   ↓
+saldo atualizado
+   ↓
+Operation = Charged
+A operação gera um efeito financeiro imediatamente.
+
+Pós-pago
+Não há débito imediato do saldo:
+
+Operação
+   ↓
+registro do consumo
+   ↓
+Operation = AwaitingInvoice
+Depois essa operação será incorporada à fatura.
+
+4. Outbox
+Aqui entra uma das partes mais importantes da arquitetura.
+
+Quando a operação produz um evento que precisa ser publicado, não queremos fazer:
+
+salva no PostgreSQL
+      ↓
+publica RabbitMQ
+porque pode acontecer:
+
+PostgreSQL OK
+RabbitMQ FALHA
+e ficarmos com o banco atualizado, mas sem evento.
+
+Por isso usamos o padrão Outbox:
+
+                 TRANSAÇÃO
+                    │
+          ┌─────────┴─────────┐
+          │                   │
+      Operation            OutboxMessage
+          │                   │
+          └─────────┬─────────┘
+                    │
+               COMMIT
+                    │
+                    ▼
+               PostgreSQL
+Depois, o OutboxWorker pega as mensagens pendentes e publica no RabbitMQ.
+
+PostgreSQL
+    ↓
+OutboxWorker
+    ↓
+RabbitMQ
+    ↓
+consumidor
+Assim o evento não depende da disponibilidade momentânea do RabbitMQ no instante da operação.
+
+5. Pós-pago → faturamento
+É aqui que entra a parte que estamos trabalhando agora.
+
+Para um cliente pós-pago, durante o mês podem existir:
+
+Operação 1   R$ 12,50
+Operação 2   R$ 45,00
+Operação 3   R$  8,90
+Operação 4   R$ 12,50
+       ...
+O serviço de faturamento consolida essas operações.
+
+Por exemplo:
+
+CustomerId: X
+Referência: 2026-11
+
+Operações:
+12,50
+45,00
+ 8,90
+12,50
+------
+78,90
+Então é criada a:
+
+Invoice
+com:
+
+CustomerId
+Reference
+Amount
+Status
+No nosso caso, já validamos uma situação real de geração de fatura pós-paga de R$ 12,50.
+
+6. Pagamento da fatura
+Depois vem o fluxo que estamos testando agora:
+
+Invoice
+   ↓
+Payment
+   ↓
+PaymentProvider
+O PaymentProvider representa o mecanismo externo de pagamento.
+
+A ideia é que o domínio não precise saber se estamos falando de:
+
+Pix
+Cartão
+Boleto
+Gateway X
+Gateway Y
+Ele trabalha com uma abstração.
+
+E aqui aparece novamente a preocupação com idempotência.
+
+Imagine:
+
+Pagar fatura
+     ↓
+gateway processa
+     ↓
+timeout
+O sistema não sabe se o gateway recebeu/processou.
+
+Então o cliente faz retry:
+
+Pagar fatura novamente
+Não podemos simplesmente criar outro pagamento.
+
+O fluxo precisa reconhecer a operação anterior.
+
+7. Reconciliação
+Essa é uma etapa particularmente importante.
+
+Temos:
+
+Invoice
+   ↓
+Payment solicitado
+   ↓
+PaymentProvider
+Depois precisamos saber:
+
+O pagamento realmente aconteceu?
+Pode existir uma diferença entre:
+
+nosso banco
+e
+
+gateway de pagamento
+Por exemplo:
+
+Nosso sistema:
+Payment = Pending
+
+Gateway:
+Payment = Paid
+A reconciliação corrige/atualiza nosso estado.
+
+Então o fluxo fica:
+
+                 ┌───────────────┐
+                 │    Invoice    │
+                 └───────┬───────┘
+                         ↓
+                 ┌───────────────┐
+                 │    Payment    │
+                 └───────┬───────┘
+                         ↓
+                 ┌───────────────┐
+                 │ PaymentProvider│
+                 └───────┬───────┘
+                         ↓
+                    pagamento
+                         ↓
+                 ┌───────────────┐
+                 │ Reconciliação │
+                 └───────┬───────┘
+                         ↓
+                  Invoice paga
+8. Onde RabbitMQ entra
+O RabbitMQ não deveria ser o lugar onde decidimos o estado financeiro principal.
+
+Ele serve para desacoplar processamento assíncrono.
+
+Por exemplo:
+
+Operação criada
+      ↓
+Outbox
+      ↓
+RabbitMQ
+      ↓
+Billing consumer
+      ↓
+processamento de faturamento
+Ou:
+
+Pagamento confirmado
+      ↓
+Outbox
+      ↓
+RabbitMQ
+      ↓
+outro consumidor
+      ↓
+atualização/notificação
+Isso permite que o sistema continue escalando sem transformar uma única requisição HTTP numa cadeia enorme de chamadas síncronas.
+
+9. O desenho geral
+Então, olhando o sistema inteiro, temos aproximadamente:
+
+                 ┌──────────────────┐
+                 │ Cliente/Simulator│
+                 └────────┬─────────┘
+                          │
+                          ▼
+                 ┌──────────────────┐
+                 │   Minimal API    │
+                 └────────┬─────────┘
+                          │
+                          ▼
+                 ┌──────────────────┐
+                 │     Operation    │
+                 │    + Idempotency │
+                 └────────┬─────────┘
+                          │
+                 ┌────────┴────────┐
+                 │                 │
+                 ▼                 ▼
+              PREPAID           POSTPAID
+                 │                 │
+                 ▼                 ▼
+             Debit/Ledger      Consumption
+                 │                 │
+                 └────────┬────────┘
+                          ▼
+                       Outbox
+                          │
+                          ▼
+                      RabbitMQ
+                          │
+                          ▼
+                 processamento async
+                          │
+                          ▼
+                    Faturamento
+                          │
+                          ▼
+                       Invoice
+                          │
+                          ▼
+                       Payment
+                          │
+                          ▼
+                 PaymentProvider
+                          │
+                          ▼
+                    Reconciliação
+E a regra de ouro
+O sistema inteiro foi desenhado em torno de uma preocupação:
+
+uma operação financeira pode ser reenviada, sofrer timeout, ser processada concorrentemente ou ter uma falha intermediária — e ainda assim não pode produzir efeitos financeiros duplicados.
+
+É por isso que aparecem várias vezes os mesmos conceitos:
+
+idempotência + transação + constraints do PostgreSQL + Outbox + reconciliação.
+
+E é justamente por isso que os testes que estamos executando agora são importantes: eles não estão apenas verificando se "o método funciona"; estão verificando se o fluxo financeiro continua correto quando alguma coisa dá errado.

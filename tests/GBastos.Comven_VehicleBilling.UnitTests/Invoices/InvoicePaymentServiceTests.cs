@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Abstractions.Payments;
+﻿using Comven_VehicleBilling.Application.Abstractions.Payments;
 using Comven_VehicleBilling.Application.Abstractions.Persistence;
 using Comven_VehicleBilling.Application.Invoices;
 
@@ -154,7 +154,7 @@ public sealed class InvoicePaymentServiceTests
     var result = await CreateService().PayAsync(_repository.Invoice.Id);
 
     var expectedInvoice = _repository.ExistingInvoice
-        ?? throw new InvalidOperationException("Fatura esperada não configurada.");
+        ?? throw new InvalidOperationException("Fatura esperada nÃ£o configurada.");
 
     Assert.Equal(expectedInvoice.Id, result.Id);
     Assert.Equal(0, _provider.Calls);
@@ -192,6 +192,41 @@ public sealed class InvoicePaymentServiceTests
     Assert.Equal(CancellationToken.None, _repository.LastCompletionToken);
   }
 
+  [Fact]
+  public async Task PayAsync_ShouldReconcilePaymentAfterProviderTimeoutWithoutDuplicateCharge()
+  {
+    var expectedException = new InvalidOperationException("Response timeout");
+
+    _provider.Result = new PaymentResult(
+        PaymentOutcome.Approved,
+        "external-timeout-001",
+        null);
+
+    _provider.ExceptionAfterProcessing = expectedException;
+
+    var firstException = await Assert.ThrowsAsync<InvalidOperationException>(
+        () => CreateService().PayAsync(_repository.Invoice.Id));
+
+    Assert.Same(expectedException, firstException);
+    Assert.Equal(1, _provider.Calls);
+    Assert.Equal(1, _repository.CompletePaymentCalls);
+    Assert.Equal(PaymentOutcome.Unknown, _repository.LastOutcome);
+
+    _repository.StartPaymentResult = null;
+    _repository.ExistingInvoice = _repository.Invoice;
+
+    var result = await CreateService().PayAsync(
+        _repository.Invoice.Id);
+
+    Assert.Equal("Paid", result.Status);
+    Assert.Equal(1, _provider.Calls);
+    Assert.Equal(1, _provider.GetPaymentCalls);
+    Assert.Equal(2, _repository.CompletePaymentCalls);
+    Assert.Equal(PaymentOutcome.Approved, _repository.LastOutcome);
+    Assert.Equal(
+        "external-timeout-001",
+        _repository.LastExternalPaymentId);
+  }
   [Fact]
   public async Task PayAsync_ShouldNotCallProviderWhenInvoiceIsNotProcessing()
   {
@@ -282,6 +317,7 @@ public sealed class InvoicePaymentServiceTests
             new(PaymentOutcome.Approved, "external-001", null);
 
     public Exception? ExceptionToThrow { get; set; }
+    public Exception? ExceptionAfterProcessing { get; set; }
 
     public Task<PaymentResult> ProcessPaymentAsync(
         PaymentRequest request,
@@ -290,6 +326,16 @@ public sealed class InvoicePaymentServiceTests
       Calls++;
       LastRequest = request;
       LastCancellationToken = cancellationToken;
+
+      if (ExceptionAfterProcessing is not null)
+      {
+        ReconciliationResult = Result;
+
+        var exception = ExceptionAfterProcessing;
+        ExceptionAfterProcessing = null;
+
+        throw exception;
+      }
 
       if (ExceptionToThrow is not null)
         throw ExceptionToThrow;
@@ -409,3 +455,5 @@ public sealed class InvoicePaymentServiceTests
     }
   }
 }
+
+
