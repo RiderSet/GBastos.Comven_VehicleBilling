@@ -1,4 +1,4 @@
-using Comven_VehicleBilling.Application.Abstractions.Payments;
+﻿using Comven_VehicleBilling.Application.Abstractions.Payments;
 using Comven_VehicleBilling.Domain.Entities;
 using Comven_VehicleBilling.Domain.Enums;
 using Comven_VehicleBilling.Domain.ValueObjects;
@@ -56,14 +56,14 @@ public sealed class PaymentProviderTests
 
       PaymentResult original;
 
-      // Primeira instÃ¢ncia: processa e persiste o pagamento.
+      // Primeira instÃƒÂ¢ncia: processa e persiste o pagamento.
       var firstProvider = CreateProvider(scenario);
 
       original = await firstProvider.ProcessPaymentAsync(request);
 
       Assert.Equal(PaymentOutcome.Approved, original.Outcome);
 
-      // Segunda instÃ¢ncia: simula a recuperaÃ§Ã£o apÃ³s reinicializaÃ§Ã£o.
+      // Segunda instÃƒÂ¢ncia: simula a recuperaÃƒÂ§ÃƒÂ£o apÃƒÂ³s reinicializaÃƒÂ§ÃƒÂ£o.
       var restartedProvider = CreateProvider(scenario);
 
       var recovered = await restartedProvider.GetPaymentAsync(
@@ -168,41 +168,7 @@ public sealed class PaymentProviderTests
     });
   }
 
-  [Fact]
-  public async Task GetPaymentAsync_ShouldRecoverPayment_WhenProviderIsRecreated()
-  {
-    await WithScenarioAsync(async scenario =>
-    {
-      var firstProvider = CreateProvider(scenario);
-      var request = CreateRequest(scenario);
-
-      // Primeiro provider registra o pagamento.
-      var originalPayment =
-          await firstProvider.ProcessPaymentAsync(request);
-
-      // Nova instÃ¢ncia, sem reutilizar o provider anterior.
-      var secondProvider = CreateProvider(scenario);
-
-      // Recupera o pagamento pela chave de idempotÃªncia.
-      var recoveredPayment =
-          await secondProvider.GetPaymentAsync(request.IdempotencyKey);
-
-      Assert.NotNull(recoveredPayment);
-      Assert.Equal(originalPayment, recoveredPayment);
-
-      // Confirma que existe apenas um registro no banco.
-      await using var db = CreateDbContext(scenario.Options);
-
-      var persisted = await db.PaymentProviderTransactions
-          .AsNoTracking()
-          .Where(x => x.InvoiceId == scenario.InvoiceId)
-          .ToListAsync();
-
-      Assert.Single(persisted);
-    });
-  }
-
-  [Fact]
+    [Fact]
     public async Task ProcessPaymentAsync_ShouldPersistOnlyOnePayment_WhenRequestsAreConcurrent()
     {
         await WithScenarioAsync(async scenario =>
@@ -300,7 +266,60 @@ public sealed class PaymentProviderTests
         });
     }
 
-    [Fact]
+  [Fact]
+  public async Task GetPaymentAsync_ShouldRecoverUnknownPayment_AfterProviderRecreation()
+  {
+    await WithScenarioAsync(async scenario =>
+    {
+      var request = CreateRequest(scenario);
+
+      var unknownTransaction = new PaymentProviderTransaction
+      {
+        Id = Guid.NewGuid(),
+        IdempotencyKey = request.IdempotencyKey,
+        InvoiceId = request.InvoiceId,
+        CustomerId = request.CustomerId,
+        Amount = request.Amount,
+        Outcome = PaymentOutcome.Unknown,
+        ExternalPaymentId = null,
+        ErrorMessage = "Provider response timeout",
+        CreatedAt = DateTime.UtcNow
+      };
+
+      await using (var db = CreateDbContext(scenario.Options))
+      {
+        db.PaymentProviderTransactions.Add(unknownTransaction);
+        await db.SaveChangesAsync();
+      }
+
+      var provider = CreateProvider(scenario);
+
+      var recovered = await provider.GetPaymentAsync(
+          request.IdempotencyKey);
+
+      Assert.NotNull(recovered);
+      Assert.Equal(PaymentOutcome.Unknown, recovered.Outcome);
+      Assert.Null(recovered.ExternalPaymentId);
+      Assert.Equal(
+          "Provider response timeout",
+          recovered.ErrorMessage);
+
+      await using var verificationDb =
+          CreateDbContext(scenario.Options);
+
+      var persisted = await verificationDb.PaymentProviderTransactions
+          .AsNoTracking()
+          .Where(x => x.InvoiceId == scenario.InvoiceId)
+          .ToListAsync();
+
+      Assert.Single(persisted);
+      Assert.Equal(
+          PaymentOutcome.Unknown,
+          persisted[0].Outcome);
+    });
+  }
+
+  [Fact]
     public async Task GetPaymentAsync_ShouldReturnNull_WhenPaymentDoesNotExist()
     {
         await WithScenarioAsync(async scenario =>
@@ -474,4 +493,7 @@ public sealed class PaymentProviderTests
         }
     }
 }
+
+
+
 

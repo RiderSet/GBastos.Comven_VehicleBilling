@@ -25,7 +25,7 @@ public sealed class InvoicePaymentService
   {
     if (invoiceId == Guid.Empty)
       throw new ArgumentException(
-          "O identificador da fatura é inválido.",
+          "O identificador da fatura Ã© invÃ¡lido.",
           nameof(invoiceId));
 
     var invoice = await _repository.StartPaymentAsync(
@@ -39,7 +39,7 @@ public sealed class InvoicePaymentService
           cancellationToken);
 
       if (existingInvoice is null)
-        throw new InvalidOperationException("Fatura não encontrada.");
+        throw new InvalidOperationException("Fatura nÃ£o encontrada.");
 
       if (!RequiresReconciliation(existingInvoice.Status))
         return existingInvoice;
@@ -69,8 +69,8 @@ public sealed class InvoicePaymentService
     }
     catch
     {
-      // Uma falha de comunicação não significa rejeição.
-      // A cobrança pode ter sido realizada pelo provedor.
+      // Uma falha de comunicaÃ§Ã£o nÃ£o significa rejeiÃ§Ã£o.
+      // A cobranÃ§a pode ter sido realizada pelo provedor.
       await _repository.CompletePaymentAsync(
           invoice.Id,
           PaymentOutcome.Unknown,
@@ -92,14 +92,17 @@ public sealed class InvoicePaymentService
   {
     var idempotencyKey = invoice.Id.ToString("N");
 
-    // Consulta exclusivamente a cobrança original.
-    // Nunca inicia uma segunda cobrança durante a reconciliação.
+    // Consulta primeiro a cobrança original.
     var result = await _paymentProvider.GetPaymentAsync(
         idempotencyKey,
         cancellationToken);
 
-    if (result is null)
-      return invoice;
+    // Se não existir registro, tenta processar novamente
+    // utilizando a mesma chave de idempotência.
+    // O provedor impede uma segunda cobrança.
+    result ??= await _paymentProvider.ProcessPaymentAsync(
+        CreatePaymentRequest(invoice),
+        cancellationToken);
 
     return await _repository.CompletePaymentAsync(
         invoice.Id,
